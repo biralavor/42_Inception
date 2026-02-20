@@ -1,0 +1,25 @@
+# Secrets and credentials
+secrets/
+*.pem
+*.key
+*.crt
+
+# Environment files with sensitive data
+.env
+
+# Docker volumes
+data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.log
+*.tmp
+*~
+.*.swp
