@@ -1,4 +1,4 @@
-DATA_DIR	= /home/umeneses/data
+DATA_DIR	:= $(shell grep '^DATA_PATH=' srcs/.env | cut -d'=' -f2)
 
 RED			= \e[0;31m
 GREEN		= \e[0;32m
@@ -6,9 +6,11 @@ YELLOW		= \e[0;33m
 CYAN		= \e[0;36m
 RESET		= \e[0m
 
+COMPOSE	= docker compose -f srcs/docker-compose.yml
+
 .PHONY: all
 all: dirs
-	docker compose up -d --build
+	$(COMPOSE) up -d --build
 	@printf "$(GREEN)Inception is up and running!$(RESET)\n"
 
 # Create host volume directories before starting containers
@@ -20,7 +22,7 @@ dirs:
 # Stop containers, keep volumes and images
 .PHONY: down
 down:
-	docker compose down
+	$(COMPOSE) down
 	@printf "$(YELLOW)Inception stopped.$(RESET)\n"
 
 # Stop + remove containers and networks (keep volumes and images)
@@ -49,7 +51,7 @@ ps:
 # Tail all service logs
 .PHONY: logs
 logs:
-	docker compose logs -f
+	$(COMPOSE) logs -f
 
 # Run health check
 .PHONY: check
