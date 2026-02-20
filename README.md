@@ -53,30 +53,6 @@ Data is persisted via two Docker volumes (WordPress files and database), and all
             └── tools/
 ```
 
-### Configuration
-
-1. Copy `.env.example` to `srcs/.env` and fill in your values:
-
-```env
-DOMAIN_NAME=login.42.fr
-MYSQL_DATABASE=wordpress
-MYSQL_USER=wpuser
-```
-
-2. Create secret files under `secrets/` (these are **not** committed to git):
-
-```bash
-echo "your_db_password"      > secrets/db_password.txt
-echo "your_root_password"    > secrets/db_root_password.txt
-echo "your_wp_credentials"   > secrets/credentials.txt
-```
-
-3. Add your domain to `/etc/hosts`:
-
-```
-127.0.0.1   login.42.fr
-```
-
 ### Build and run
 
 ```bash
