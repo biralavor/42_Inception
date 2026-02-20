@@ -15,6 +15,7 @@ RUN apk add --no-cache \
     php84-session \
     php84-intl \
     php84-fileinfo \
+    php84-phar \
     wget \
     mariadb-client
 
@@ -25,6 +26,8 @@ RUN ln -s /usr/bin/php84 /usr/bin/php
 RUN wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
     -O /usr/local/bin/wp \
     && chmod +x /usr/local/bin/wp
+
+RUN echo "memory_limit = 256M" > /etc/php84/conf.d/memory.ini
 
 RUN mkdir -p /var/www/html
 
