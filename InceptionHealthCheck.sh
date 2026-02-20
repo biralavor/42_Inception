@@ -171,6 +171,24 @@ if container_running mariadb; then
     else
         pass "No forbidden admin username variants detected"
     fi
+
+    # nginx must NOT be inside the mariadb container
+    if docker exec mariadb which nginx &>/dev/null; then
+        fail "nginx found inside mariadb container (must not be there)"
+    else
+        pass "nginx is NOT inside mariadb container"
+    fi
+
+    # WordPress database must not be empty
+    mysql_db=$(grep "^MYSQL_DATABASE=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "wordpress")
+    wp_tables=$(docker exec mariadb mysql -uroot \
+        --password="$(cat secrets/db_root_password.txt 2>/dev/null)" \
+        -e "SHOW TABLES FROM ${mysql_db};" 2>/dev/null | grep -vc "Tables_in" || true)
+    if [[ "$wp_tables" -gt 0 ]]; then
+        pass "WordPress database '${mysql_db}' has ${wp_tables} table(s) — not empty"
+    else
+        fail "WordPress database '${mysql_db}' appears to be empty"
+    fi
 else
     info "mariadb container not running — skipping DB checks"
 fi
@@ -219,6 +237,15 @@ for df in "${dockerfiles[@]}"; do
         pass "$basename_df: no :latest tag"
     fi
 
+    # FROM must use a pinned penultimate Alpine or Debian version
+    from_line=$(grep -m1 "^FROM" "$df" 2>/dev/null || echo "")
+    if echo "$from_line" | grep -qiE "^FROM (alpine|debian):[0-9a-zA-Z]" && \
+       ! echo "$from_line" | grep -qi ":latest"; then
+        pass "$basename_df: FROM uses pinned Alpine/Debian version"
+    else
+        fail "$basename_df: FROM must be penultimate Alpine/Debian with explicit version (got: '${from_line:-empty}')"
+    fi
+
     if grep -iE "(password|passwd|secret)\s*=\s*\S+" "$df" | grep -v "^#" | grep -q .; then
         fail "$basename_df may contain hardcoded credentials"
     else
@@ -232,28 +259,29 @@ for df in "${dockerfiles[@]}"; do
     fi
 done
 
-# ── 11. docker-compose.yaml Safety ───────────────────────────────────────────
+# ── 11. docker-compose.yml Safety ────────────────────────────────────────────
 section "Docker Compose Safety Checks"
-if [[ -f "docker-compose.yaml" ]]; then
-    if grep -qE "network:\s*host|--link|^\s+links:" docker-compose.yaml; then
-        fail "docker-compose.yaml contains forbidden network directives (network:host / --link / links:)"
+COMPOSE_FILE="srcs/docker-compose.yml"
+if [[ -f "$COMPOSE_FILE" ]]; then
+    if grep -qE "network:\s*host|--link|^\s+links:" "$COMPOSE_FILE"; then
+        fail "$COMPOSE_FILE contains forbidden network directives (network:host / --link / links:)"
     else
-        pass "docker-compose.yaml: no forbidden network directives"
+        pass "$COMPOSE_FILE: no forbidden network directives"
     fi
 
-    if grep -q ":latest" docker-compose.yaml; then
-        fail "docker-compose.yaml references :latest tag (forbidden)"
+    if grep -q ":latest" "$COMPOSE_FILE"; then
+        fail "$COMPOSE_FILE references :latest tag (forbidden)"
     else
-        pass "docker-compose.yaml: no :latest tag"
+        pass "$COMPOSE_FILE: no :latest tag"
     fi
 
-    if grep -q "network:" docker-compose.yaml; then
-        pass "docker-compose.yaml has a network definition"
+    if grep -q "network:" "$COMPOSE_FILE"; then
+        pass "$COMPOSE_FILE has a network definition"
     else
-        fail "docker-compose.yaml is missing a network definition (required)"
+        fail "$COMPOSE_FILE is missing a network definition (required)"
     fi
 else
-    fail "docker-compose.yaml not found at repository root"
+    fail "$COMPOSE_FILE not found (must be at srcs/docker-compose.yml)"
 fi
 
 # ── 12. Secrets & Environment Files ──────────────────────────────────────────
@@ -284,6 +312,67 @@ if git rev-parse --git-dir &>/dev/null; then
 else
     info "Not a git repository — skipping git secret tracking check"
 fi
+
+# ── 13. Repository Structure ──────────────────────────────────────────────────
+section "Repository Structure"
+
+if [[ -f "Makefile" ]]; then
+    pass "Makefile exists at repository root"
+else
+    fail "Makefile missing at repository root"
+fi
+
+if [[ -d "srcs" ]]; then
+    pass "srcs/ directory exists at repository root"
+else
+    fail "srcs/ directory missing at repository root"
+fi
+
+# One non-empty Dockerfile per mandatory service
+for svc in nginx wordpress mariadb; do
+    df="srcs/requirements/$svc/Dockerfile"
+    if [[ -f "$df" && -s "$df" ]]; then
+        pass "Dockerfile exists and non-empty: srcs/requirements/$svc/"
+    else
+        fail "Dockerfile missing or empty: $df"
+    fi
+done
+
+# No --link in Makefile or any script
+if grep -rqE "\-\-link" Makefile srcs/ 2>/dev/null; then
+    fail "--link found in Makefile or srcs/ (forbidden)"
+else
+    pass "No --link found in Makefile or srcs/"
+fi
+
+# ── 14. Entrypoint Script Safety ──────────────────────────────────────────────
+section "Entrypoint Script Safety"
+
+mapfile -t entrypoint_scripts < <(find srcs/requirements -name "*.sh" 2>/dev/null | sort)
+if [[ ${#entrypoint_scripts[@]} -eq 0 ]]; then
+    info "No shell scripts found in srcs/requirements/ — skipping"
+else
+    for script in "${entrypoint_scripts[@]}"; do
+        # Forbidden: background process after daemon (e.g. "nginx & bash"), tail -f, sleep infinity
+        if grep -qE "(nginx|php-fpm|mysqld)\s*&\s*(bash|sh)|tail\s+-f|sleep\s+infinity" "$script"; then
+            fail "$script: contains forbidden background/infinite-loop pattern"
+        else
+            pass "$script: no forbidden background patterns"
+        fi
+    done
+fi
+
+# ── 15. Docker Image Names Match Services ─────────────────────────────────────
+section "Docker Image Names"
+
+existing_images=$(docker images --format '{{.Repository}}' 2>/dev/null)
+for svc in nginx wordpress mariadb; do
+    if echo "$existing_images" | grep -qE "^${svc}$"; then
+        pass "Docker image named '${svc}' exists (matches service name)"
+    else
+        fail "No Docker image named '${svc}' found (image name must match service name)"
+    fi
+done
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n${YELLOW}══════════════════════════════${RESET}\n"
