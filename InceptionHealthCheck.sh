@@ -80,11 +80,11 @@ if command -v curl &>/dev/null; then
         fail "NGINX returned unexpected HTTP code: $http_code"
     fi
 
-    # Port 80 must NOT be exposed
-    if curl -s --connect-timeout 2 "http://localhost:80/" &>/dev/null; then
-        fail "Port 80 is exposed (only port 443 is allowed)"
+    # Port 80 must NOT be exposed by any Docker container
+    if docker ps --format '{{.Ports}}' | grep -q ':80->'; then
+        fail "Port 80 is exposed by a Docker container (only port 443 is allowed)"
     else
-        pass "Port 80 is not exposed"
+        pass "Port 80 is not exposed by Docker"
     fi
 else
     info "curl not found — skipping HTTP checks"
@@ -112,8 +112,9 @@ for vol in wordpress_data db_data; do
     fi
 done
 
+data_path=$(grep '^DATA_PATH=' srcs/.env 2>/dev/null | cut -d= -f2)
 for dir in wordpress mariadb; do
-    host_path="/home/umeneses/data/$dir"
+    host_path="${data_path}/$dir"
     if [[ -d "$host_path" ]]; then
         pass "Host data directory exists: $host_path"
     else

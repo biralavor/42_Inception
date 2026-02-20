@@ -11,10 +11,11 @@ DB_PASSWORD=$(cat /run/secrets/db_password)
 #   Line 4 - regular user password
 WP_ADMIN_USER=$(sed -n '1p' /run/secrets/credentials)
 WP_ADMIN_PASS=$(sed -n '2p' /run/secrets/credentials)
-WP_USER=$(sed -n '3p' /run/secrets/credentials)
-WP_USER_PASS=$(sed -n '4p' /run/secrets/credentials)
+WP_EDITOR=$(sed -n '3p' /run/secrets/credentials)
+WP_EDITOR_PASS=$(sed -n '4p' /run/secrets/credentials)
 
 # Non-sensitive config from environment (.env)
+# NOTE: WP_USER here is the DB username from .env, not the WP application user
 DB_NAME="${WP_DATABASE:-wordpress}"
 DB_USER="${WP_USER:-wp_user}"
 DB_HOST="${WP_HOST:-mariadb}"
@@ -24,28 +25,35 @@ WP_PATH="${DOMAIN_ROOT:-/var/www/html}"
 # Wait for MariaDB to accept connections (bounded: 30 attempts)
 echo "Waiting for MariaDB at ${DB_HOST}..."
 i=0
-until mysqladmin ping -h "${DB_HOST}" --silent 2>/dev/null; do
+until mysqladmin ping -h "${DB_HOST}" --skip-ssl --silent 2>/dev/null; do
     i=$((i + 1))
     [ "$i" -gt 30 ] && echo "ERROR: MariaDB not reachable after 30s" && exit 1
     sleep 1
 done
 echo "MariaDB is ready."
 
-if [ ! -f "${WP_PATH}/wp-config.php" ]; then
+# Check if WordPress is fully installed (not just if wp-config.php exists)
+if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
     echo "Installing WordPress..."
 
-    wp core download \
-        --path="${WP_PATH}" \
-        --allow-root
+    # Download core files if not already present
+    if [ ! -f "${WP_PATH}/wp-includes/version.php" ]; then
+        wp core download \
+            --path="${WP_PATH}" \
+            --allow-root
+    fi
 
-    wp config create \
-        --path="${WP_PATH}" \
-        --dbname="${DB_NAME}" \
-        --dbuser="${DB_USER}" \
-        --dbpass="${DB_PASSWORD}" \
-        --dbhost="${DB_HOST}" \
-        --dbprefix="${WP_TABLE_PREFIX:-wp_}" \
-        --allow-root
+    # Create config if not already present
+    if [ ! -f "${WP_PATH}/wp-config.php" ]; then
+        wp config create \
+            --path="${WP_PATH}" \
+            --dbname="${DB_NAME}" \
+            --dbuser="${DB_USER}" \
+            --dbpass="${DB_PASSWORD}" \
+            --dbhost="${DB_HOST}" \
+            --dbprefix="${WP_TABLE_PREFIX:-wp_}" \
+            --allow-root
+    fi
 
     wp core install \
         --path="${WP_PATH}" \
@@ -57,9 +65,9 @@ if [ ! -f "${WP_PATH}/wp-config.php" ]; then
         --skip-email \
         --allow-root
 
-    wp user create "${WP_USER}" "${WP_USER}@${DOMAIN}" \
+    wp user create "${WP_EDITOR}" "${WP_EDITOR}@${DOMAIN}" \
         --path="${WP_PATH}" \
-        --user_pass="${WP_USER_PASS}" \
+        --user_pass="${WP_EDITOR_PASS}" \
         --role=author \
         --allow-root
 
