@@ -1,0 +1,34 @@
+server {
+    listen      443 ssl;
+    server_name ${DOMAIN_NAME};
+
+    # TLS — only v1.2 and v1.3 are allowed by the subject
+    ssl_certificate     /etc/nginx/ssl/nginx.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+
+    root  ${DOMAIN_ROOT};
+    index index.php index.html;
+
+    # WordPress pretty permalinks
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # Pass PHP requests to php-fpm in the wordpress container
+    location ~ \.php$ {
+        try_files      $uri =404;
+        fastcgi_pass   wordpress:9000;
+        fastcgi_index  index.php;
+        include        fastcgi_params;
+        fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param  PATH_INFO $fastcgi_path_info;
+    }
+
+    # Deny access to hidden files (.htaccess, .git, etc.)
+    location ~ /\. {
+        deny all;
+    }
+}
