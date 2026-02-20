@@ -18,8 +18,8 @@ FAIL=0
 DOMAIN="umeneses.42.fr"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-pass()    { printf "${GREEN}[PASS]${RESET} %s\n" "$1"; ((PASS++)); }
-fail()    { printf "${RED}[FAIL]${RESET} %s\n" "$1"; ((FAIL++)); }
+pass()    { printf "${GREEN}[PASS]${RESET} %s\n" "$1"; ((++PASS)); }
+fail()    { printf "${RED}[FAIL]${RESET} %s\n" "$1"; ((++FAIL)); }
 info()    { printf "${CYAN}[INFO]${RESET} %s\n" "$1"; }
 section() { printf "\n${YELLOW}=== %s ===${RESET}\n" "$1"; }
 
@@ -59,7 +59,7 @@ if command -v openssl &>/dev/null; then
         fi
     done
     for proto in tls1 tls1_1; do
-        result=$(openssl s_client -connect localhost:443 -"${proto}" </dev/null 2>&1)
+        result=$(openssl s_client -connect localhost:443 -"${proto}" </dev/null 2>&1) || true
         if echo "$result" | grep -qiE "alert|error|no protocols"; then
             pass "TLS protocol ${proto} correctly rejected"
         else
