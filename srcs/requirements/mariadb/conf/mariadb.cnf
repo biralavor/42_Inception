@@ -11,6 +11,7 @@ tmpdir                  = /tmp
 # Network settings
 bind-address            = 0.0.0.0
 skip-networking         = false
+max_connect_errors      = 1000000
 
 # Character set
 character-set-server    = utf8mb4

@@ -56,4 +56,4 @@ logs:
 # Run health check
 .PHONY: check
 check:
-	@bash InceptionHealthCheck.sh
+	@./InceptionHealthCheck.sh 2>&1 | tee /tmp/inception_check.tmp && sed 's/\x1b\[[0-9;]*m//g' /tmp/inception_check.tmp > release.txt && rm /tmp/inception_check.tmp
