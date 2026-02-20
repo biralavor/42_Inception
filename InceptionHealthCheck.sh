@@ -112,8 +112,9 @@ for vol in wordpress_data db_data; do
     fi
 done
 
+data_path=$(grep '^DATA_PATH=' srcs/.env 2>/dev/null | cut -d= -f2)
 for dir in wordpress mariadb; do
-    host_path="/home/umeneses/data/$dir"
+    host_path="${data_path}/$dir"
     if [[ -d "$host_path" ]]; then
         pass "Host data directory exists: $host_path"
     else
