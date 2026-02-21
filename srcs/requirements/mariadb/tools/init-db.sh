@@ -14,7 +14,7 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
     mysql_install_db --user=mysql --datadir=/var/lib/mysql > /dev/null
 
     # Start a temporary instance (socket only, no TCP) for setup
-    mysqld --user=mysql --skip-networking &
+    mariadbd --user=mysql --skip-networking &
     MYSQLD_PID=$!
 
     # Wait until the socket is ready (bounded: 30 attempts)
@@ -41,4 +41,4 @@ else
     echo "MariaDB already initialized."
 fi
 
-exec mysqld --user=mysql
+exec mariadbd --user=mysql
