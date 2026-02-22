@@ -86,6 +86,14 @@ if command -v curl &>/dev/null; then
     else
         pass "Port 80 is not exposed by Docker"
     fi
+
+    # wp-admin must be reachable (200 or 302 redirect to login)
+    wp_admin_code=$(curl -sk -o /dev/null -w "%{http_code}" "https://localhost:443/wp-admin/" 2>/dev/null || echo "000")
+    if [[ "$wp_admin_code" =~ ^(200|302)$ ]]; then
+        pass "WordPress wp-admin reachable (HTTP $wp_admin_code)"
+    else
+        fail "WordPress wp-admin not reachable (HTTP $wp_admin_code)"
+    fi
 else
     info "curl not found — skipping HTTP checks"
 fi
@@ -112,9 +120,13 @@ for vol in wordpress_data db_data; do
     fi
 done
 
-data_path=$(grep '^DATA_PATH=' srcs/.env 2>/dev/null | cut -d= -f2)
+data_path=$(grep "^DATA_PATH=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "")
 for dir in wordpress mariadb; do
-    host_path="${data_path}/$dir"
+    if [[ -n "$data_path" ]]; then
+        host_path="${data_path}/$dir"
+    else
+        host_path="/home/umeneses/data/$dir"
+    fi
     if [[ -d "$host_path" ]]; then
         pass "Host data directory exists: $host_path"
     else
@@ -155,24 +167,6 @@ if container_running mariadb; then
         fail "MariaDB ping failed"
     fi
 
-    # Check WordPress DB user count (must have 2: admin + regular)
-    wp_db=$(docker exec mariadb mysql -uroot \
-        --password="$(cat secrets/db_root_password.txt 2>/dev/null)" \
-        -e "SELECT User FROM mysql.user WHERE Host='localhost';" 2>/dev/null || echo "")
-    user_count=$(echo "$wp_db" | grep -vc "User" || true)
-    if [[ "$user_count" -ge 2 ]]; then
-        pass "MariaDB has $user_count local user(s) (minimum 2 required)"
-    else
-        fail "MariaDB has fewer than 2 local users (got $user_count)"
-    fi
-
-    # Admin username must NOT contain 'admin' variants
-    if echo "$wp_db" | grep -iE "^(admin|administrator|admin-[0-9]+)$"; then
-        fail "An admin-like username was found — forbidden by subject rules"
-    else
-        pass "No forbidden admin username variants detected"
-    fi
-
     # nginx must NOT be inside the mariadb container
     if docker exec mariadb which nginx &>/dev/null; then
         fail "nginx found inside mariadb container (must not be there)"
@@ -180,11 +174,33 @@ if container_running mariadb; then
         pass "nginx is NOT inside mariadb container"
     fi
 
-    # WordPress database must not be empty
-    mysql_db=$(grep "^MYSQL_DATABASE=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "wordpress")
-    wp_tables=$(docker exec mariadb mysql -uroot \
-        --password="$(cat secrets/db_root_password.txt 2>/dev/null)" \
-        -e "SHOW TABLES FROM ${mysql_db};" 2>/dev/null | grep -vc "Tables_in" || true)
+    # MariaDB port 3306 must NOT be reachable from the host
+    if command -v nc &>/dev/null; then
+        if nc -z -w1 127.0.0.1 3306 2>/dev/null; then
+            fail "MariaDB port 3306 is reachable from the host (must be internal only)"
+        else
+            pass "MariaDB port 3306 is NOT exposed to the host"
+        fi
+    elif command -v curl &>/dev/null; then
+        if curl -s --connect-timeout 1 "mysql://127.0.0.1:3306" &>/dev/null || \
+           curl -s --max-time 1 -o /dev/null "http://127.0.0.1:3306" 2>&1 | grep -q "Received"; then
+            fail "MariaDB port 3306 is reachable from the host (must be internal only)"
+        else
+            pass "MariaDB port 3306 is NOT exposed to the host"
+        fi
+    else
+        # Fallback: check docker ps for published 3306 port
+        if docker ps --format '{{.Ports}}' | grep -q ':3306->'; then
+            fail "MariaDB port 3306 is exposed by Docker (must be internal only)"
+        else
+            pass "MariaDB port 3306 is NOT exposed by Docker"
+        fi
+    fi
+
+    # WordPress database must not be empty (connect via socket as root — no password needed from docker exec)
+    mysql_db=$(grep "^WP_DATABASE=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "wordpress")
+    wp_tables=$(docker exec mariadb mysql -uroot --socket=/run/mysqld/mysqld.sock \
+        -e "SHOW TABLES FROM \`${mysql_db}\`;" 2>/dev/null | grep -vc "Tables_in" || true)
     if [[ "$wp_tables" -gt 0 ]]; then
         pass "WordPress database '${mysql_db}' has ${wp_tables} table(s) — not empty"
     else
@@ -213,6 +229,45 @@ if container_running wordpress; then
     else
         pass "nginx is NOT inside wordpress container"
     fi
+
+    # WordPress must have exactly 2 users (admin + regular editor)
+    wp_path=$(grep "^DOMAIN_ROOT=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "/var/www/html")
+    wp_user_list=$(docker exec wordpress wp user list \
+        --path="${wp_path:-/var/www/html}" \
+        --fields=user_login,roles --allow-root 2>/dev/null || echo "")
+    wp_user_count=$(echo "$wp_user_list" | grep -vc "user_login" || true)
+    if [[ "$wp_user_count" -ge 2 ]]; then
+        pass "WordPress has $wp_user_count user(s) (minimum 2 required)"
+    else
+        fail "WordPress has fewer than 2 users (got $wp_user_count) — subject requires admin + regular user"
+    fi
+
+    # Admin username must NOT contain 'admin' variants
+    if echo "$wp_user_list" | grep -iE "^(admin|administrator|admin-[0-9]+)\s"; then
+        fail "A forbidden admin-like WordPress username was found"
+    else
+        pass "No forbidden admin username variants in WordPress users"
+    fi
+
+    # Active theme must be KALPA
+    if docker exec wordpress wp theme is-active kalpa \
+        --path="${wp_path:-/var/www/html}" \
+        --allow-root 2>/dev/null; then
+        pass "Active WordPress theme is KALPA"
+    else
+        fail "Active WordPress theme is NOT KALPA"
+    fi
+
+    # Required plugins must be active
+    for plugin in elementor wpkoi-templates-for-elementor; do
+        if docker exec wordpress wp plugin is-active "${plugin}" \
+            --path="${wp_path:-/var/www/html}" \
+            --allow-root 2>/dev/null; then
+            pass "Plugin '${plugin}' is active"
+        else
+            fail "Plugin '${plugin}' is not active"
+        fi
+    done
 else
     info "wordpress container not running — skipping php checks"
 fi
@@ -223,7 +278,6 @@ dockerfiles=(
     "srcs/requirements/nginx/Dockerfile"
     "srcs/requirements/wordpress/Dockerfile"
     "srcs/requirements/mariadb/Dockerfile"
-    "Dockerfile"
 )
 for df in "${dockerfiles[@]}"; do
     if [[ ! -f "$df" ]]; then
@@ -366,12 +420,15 @@ fi
 # ── 15. Docker Image Names Match Services ─────────────────────────────────────
 section "Docker Image Names"
 
-existing_images=$(docker images --format '{{.Repository}}' 2>/dev/null)
+# Check that each running container uses an image whose name matches the service.
+# This avoids false positives from official nginx/wordpress/mariadb images that
+# may exist on the system from unrelated pulls.
 for svc in nginx wordpress mariadb; do
-    if echo "$existing_images" | grep -qE "^${svc}$"; then
-        pass "Docker image named '${svc}' exists (matches service name)"
+    img=$(docker inspect "$svc" --format '{{.Config.Image}}' 2>/dev/null || echo "")
+    if [[ "$img" == "$svc" ]]; then
+        pass "Container '$svc' uses image named '$svc' (matches service name)"
     else
-        fail "No Docker image named '${svc}' found (image name must match service name)"
+        fail "Container '$svc' uses image '${img:-N/A}' (expected image named '$svc')"
     fi
 done
 

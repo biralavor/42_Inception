@@ -71,6 +71,21 @@ if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
         --role=author \
         --allow-root
 
+    wp theme install kalpa \
+        --path="${WP_PATH}" \
+        --activate \
+        --allow-root
+
+    wp plugin install elementor \
+        --path="${WP_PATH}" \
+        --activate \
+        --allow-root
+
+    wp plugin install wpkoi-templates-for-elementor \
+        --path="${WP_PATH}" \
+        --activate \
+        --allow-root
+
     # php-fpm runs as nobody — hand over ownership
     chown -R nobody:nobody "${WP_PATH}"
 
