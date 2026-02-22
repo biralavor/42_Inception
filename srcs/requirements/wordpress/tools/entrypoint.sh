@@ -86,6 +86,56 @@ if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
         --activate \
         --allow-root
 
+    # Import seed images from FTP shared directory if present
+    if ls "${WP_PATH}/wp-content/uploads/seed/"*.jpg 2>/dev/null | head -1 | grep -q .; then
+        wp media import "${WP_PATH}/wp-content/uploads/seed/"*.jpg \
+            --path="${WP_PATH}" \
+            --allow-root || true
+        echo "Seed images imported into WordPress media library."
+    else
+        echo "No seed images found — skipping media import."
+    fi
+
+    # Create WordPress users from Inception cast images and set profile pictures
+    CAST_SRC="${WP_PATH}/wp-content/uploads/seed"
+    if ls "${CAST_SRC}"/cast-*.jpeg 2>/dev/null | head -1 | grep -q .; then
+        wp plugin install simple-local-avatars \
+            --path="${WP_PATH}" \
+            --activate \
+            --allow-root || true
+
+        for cast_file in "${CAST_SRC}"/cast-*.jpeg; do
+            name=$(basename "${cast_file}" .jpeg | sed 's/^cast-//')
+            username=$(echo "${name}" | tr '[:upper:]' '[:lower:]')
+
+            wp user create "${username}" "${username}@${DOMAIN}" \
+                --display_name="${name}" \
+                --role=subscriber \
+                --skip-email \
+                --path="${WP_PATH}" \
+                --allow-root 2>/dev/null || true
+
+            user_id=$(wp user get "${username}" --field=ID \
+                --path="${WP_PATH}" --allow-root 2>/dev/null || echo "")
+            [ -z "${user_id}" ] && continue
+
+            attach_id=$(wp media import "${cast_file}" \
+                --path="${WP_PATH}" \
+                --allow-root \
+                --porcelain 2>/dev/null || echo "")
+            [ -z "${attach_id}" ] && continue
+
+            wp user meta update "${user_id}" simple_local_avatar \
+                "{\"full\":${attach_id},\"96\":${attach_id},\"32\":${attach_id}}" \
+                --format=json \
+                --path="${WP_PATH}" \
+                --allow-root || true
+
+            echo "Cast user created: ${name}"
+        done
+        echo "Cast users setup complete."
+    fi
+
     # php-fpm runs as nobody — hand over ownership
     chown -R nobody:nobody "${WP_PATH}"
 

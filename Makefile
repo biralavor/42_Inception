@@ -43,6 +43,18 @@ fclean: clean
 .PHONY: re
 re: fclean all
 
+# Start mandatory + all bonus services
+.PHONY: bonus
+bonus: dirs
+	$(COMPOSE) --profile bonus up -d --build
+	@printf "$(GREEN)Inception with bonus services is up!$(RESET)\n"
+
+# Stop bonus services only
+.PHONY: bonus_down
+bonus_down:
+	$(COMPOSE) --profile bonus down
+	@printf "$(YELLOW)Bonus services stopped.$(RESET)\n"
+
 # Show container status
 .PHONY: ps
 ps:

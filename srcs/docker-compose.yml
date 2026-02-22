@@ -8,6 +8,8 @@ secrets:
     file: ../secrets/db_root_password.txt
   credentials:
     file: ../secrets/credentials.txt
+  ftp_password:
+    file: ../secrets/ftp_password.txt
 
 services:
 
@@ -63,6 +65,26 @@ services:
     secrets:
       - db_password
       - db_root_password
+    restart: unless-stopped
+
+  ftp:
+    build:
+      context: ./bonus/ftp
+      dockerfile: Dockerfile
+    image: ftp
+    container_name: ftp
+    profiles: [bonus]
+    volumes:
+      - wordpress_data:/var/www/html
+    ports:
+      - "21:21"
+      - "21100-21110:21100-21110"
+    env_file:
+      - ./.env
+    secrets:
+      - ftp_password
+    networks:
+      - inception_network
     restart: unless-stopped
 
 networks:
