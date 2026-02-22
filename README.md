@@ -131,6 +131,17 @@ This project uses **Docker volumes** for the WordPress database and website file
 
 ---
 
+## Documentation
+
+Full project documentation lives in the `docs/` directory:
+
+| File | Audience | Contents |
+|------|----------|----------|
+| [`docs/USER_DOC.md`](docs/USER_DOC.md) | End users / administrators | Services overview, start/stop, site access, credentials, health check |
+| [`docs/DEV_DOC.md`](docs/DEV_DOC.md) | Developers | Setup from scratch, build & launch, container and volume management, architecture |
+
+---
+
 ## Resources
 
 ### Documentation
