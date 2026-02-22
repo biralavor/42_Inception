@@ -248,6 +248,26 @@ if container_running wordpress; then
     else
         pass "No forbidden admin username variants in WordPress users"
     fi
+
+    # Active theme must be KALPA
+    if docker exec wordpress wp theme is-active kalpa \
+        --path="${wp_path:-/var/www/html}" \
+        --allow-root 2>/dev/null; then
+        pass "Active WordPress theme is KALPA"
+    else
+        fail "Active WordPress theme is NOT KALPA"
+    fi
+
+    # Required plugins must be active
+    for plugin in elementor wpkoi-templates-for-elementor; do
+        if docker exec wordpress wp plugin is-active "${plugin}" \
+            --path="${wp_path:-/var/www/html}" \
+            --allow-root 2>/dev/null; then
+            pass "Plugin '${plugin}' is active"
+        else
+            fail "Plugin '${plugin}' is not active"
+        fi
+    done
 else
     info "wordpress container not running — skipping php checks"
 fi
