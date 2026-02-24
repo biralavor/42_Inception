@@ -71,6 +71,19 @@ if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
         --role=author \
         --allow-root
 
+    # php-fpm runs as nobody — hand over ownership
+    chown -R nobody:nobody "${WP_PATH}"
+
+    echo "WordPress installation complete."
+else
+    echo "WordPress already installed."
+fi
+
+# Bonus setup — runs on every startup when BONUS_SETUP=true.
+# Theme/plugin installs are idempotent. Seed import and cast users use flag
+# files to prevent duplicate media entries on container restarts.
+# Override: BONUS_SETUP=true is injected by `make bonus` at runtime.
+if [ "${BONUS_SETUP:-false}" = "true" ]; then
     wp theme install kalpa \
         --path="${WP_PATH}" \
         --activate \
@@ -86,12 +99,88 @@ if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
         --activate \
         --allow-root
 
-    # php-fpm runs as nobody — hand over ownership
-    chown -R nobody:nobody "${WP_PATH}"
+    # Import seed images from FTP shared directory if present (once only)
+    SEED_FLAG="${WP_PATH}/.seed-imported"
+    set -- "${WP_PATH}/wp-content/uploads/seed/"*.jpg
+    if [ -f "$1" ] && [ ! -f "${SEED_FLAG}" ]; then
+        wp media import "${WP_PATH}/wp-content/uploads/seed/"*.jpg \
+            --path="${WP_PATH}" \
+            --allow-root || true
+        touch "${SEED_FLAG}"
+        echo "Seed images imported into WordPress media library."
+    else
+        echo "No seed images found or already imported — skipping media import."
+    fi
 
-    echo "WordPress installation complete."
-else
-    echo "WordPress already installed."
+    # Create WordPress users from Inception cast images and set profile pictures
+    # Cast users have no password by design — display-only subscriber accounts.
+    # Flag file prevents duplicate avatar imports on container restarts.
+    CAST_SRC="${WP_PATH}/wp-content/uploads/seed"
+    CAST_FLAG="${WP_PATH}/.cast-setup-done"
+    set -- "${CAST_SRC}"/cast-*.jpeg
+    if [ -f "$1" ] && [ ! -f "${CAST_FLAG}" ]; then
+        wp plugin install simple-local-avatars \
+            --path="${WP_PATH}" \
+            --activate \
+            --allow-root || true
+
+        for cast_file in "${CAST_SRC}"/cast-*.jpeg; do
+            name=$(basename "${cast_file}" .jpeg | sed 's/^cast-//')
+            username=$(echo "${name}" | tr '[:upper:]' '[:lower:]')
+
+            wp user create "${username}" "${username}@${DOMAIN}" \
+                --display_name="${name}" \
+                --role=subscriber \
+                --skip-email \
+                --path="${WP_PATH}" \
+                --allow-root 2>/dev/null || true
+
+            user_id=$(wp user get "${username}" --field=ID \
+                --path="${WP_PATH}" --allow-root 2>/dev/null || echo "")
+            [ -z "${user_id}" ] && continue
+
+            attach_id=$(wp media import "${cast_file}" \
+                --path="${WP_PATH}" \
+                --allow-root \
+                --porcelain 2>/dev/null || echo "")
+            [ -z "${attach_id}" ] && continue
+
+            wp user meta update "${user_id}" simple_local_avatar \
+                "{\"full\":${attach_id},\"96\":${attach_id},\"32\":${attach_id}}" \
+                --format=json \
+                --path="${WP_PATH}" \
+                --allow-root || true
+
+            echo "Cast user created: ${name}"
+        done
+        touch "${CAST_FLAG}"
+        echo "Cast users setup complete."
+    fi
+
+    # Ensure php-fpm (nobody) owns any files added by bonus setup
+    chown -R nobody:nobody "${WP_PATH}"
+fi
+
+# Set hero image as featured image of post 1 (idempotent)
+webp_seed="${WP_PATH}/wp-content/uploads/seed/Inception-deep-time-tester-object.webp"
+if [ -f "${webp_seed}" ]; then
+    existing=$(wp post meta get 1 _thumbnail_id \
+        --path="${WP_PATH}" --allow-root 2>/dev/null || echo "")
+    if [ -z "${existing}" ]; then
+        hero_id=$(wp media import "${webp_seed}" \
+            --path="${WP_PATH}" \
+            --allow-root \
+            --porcelain 2>/dev/null || echo "")
+        if [ -n "${hero_id}" ]; then
+            wp post meta update 1 _thumbnail_id "${hero_id}" \
+                --path="${WP_PATH}" --allow-root || true
+            echo "Featured image set on post 1 (attachment ${hero_id})."
+        else
+            echo "Hero image import failed — skipping featured image."
+        fi
+    else
+        echo "Post 1 already has a featured image — skipping."
+    fi
 fi
 
 exec php-fpm84 -F

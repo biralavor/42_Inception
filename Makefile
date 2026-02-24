@@ -10,7 +10,7 @@ COMPOSE	= docker compose -f srcs/docker-compose.yml
 
 .PHONY: all
 all: dirs
-	$(COMPOSE) up -d --build
+	$(COMPOSE) up -d --build --wait
 	@printf "$(GREEN)Inception is up and running!$(RESET)\n"
 
 # Create host volume directories before starting containers
@@ -31,17 +31,30 @@ clean: down
 	docker system prune -f
 	@printf "$(YELLOW)Containers and dangling resources removed.$(RESET)\n"
 
-# Full reset: containers + volumes + images + host data
+# Full reset: containers + volumes + images + builder cache + host data
 .PHONY: fclean
 fclean: clean
 	docker volume rm $$(docker volume ls -q) 2>/dev/null || true
 	docker image rm $$(docker image ls -q) 2>/dev/null || true
+	docker builder prune -f 2>/dev/null || true
 	sudo rm -rf $(DATA_DIR)
 	@printf "$(RED)Full clean done.$(RESET)\n"
 
 # Rebuild everything from scratch
 .PHONY: re
 re: fclean all
+
+# Start mandatory + all bonus services
+.PHONY: bonus
+bonus: dirs
+	BONUS_SETUP=true $(COMPOSE) --profile bonus up -d --build --wait
+	@printf "$(GREEN)Inception with bonus services is up!$(RESET)\n"
+
+# Stop bonus services only
+.PHONY: bonus_down
+bonus_down:
+	$(COMPOSE) --profile bonus down
+	@printf "$(YELLOW)Bonus services stopped.$(RESET)\n"
 
 # Show container status
 .PHONY: ps

@@ -2,6 +2,10 @@
 # InceptionHealthCheck.sh
 # Integration health check for the 42 Inception project.
 # Run from the repository root: bash InceptionHealthCheck.sh
+#
+# Mandatory tests always run; bonus tests always run too but their failures
+# are tracked separately and do NOT affect the exit code.
+# Bonus tests pass only when the stack was started with `make bonus`.
 
 set -euo pipefail
 
@@ -10,18 +14,24 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 RESET='\033[0m'
 
 # ── State ─────────────────────────────────────────────────────────────────────
 PASS=0
 FAIL=0
+BONUS_PASS=0
+BONUS_FAIL=0
 DOMAIN="umeneses.42.fr"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-pass()    { printf "${GREEN}[PASS]${RESET} %s\n" "$1"; ((++PASS)); }
-fail()    { printf "${RED}[FAIL]${RESET} %s\n" "$1"; ((++FAIL)); }
-info()    { printf "${CYAN}[INFO]${RESET} %s\n" "$1"; }
-section() { printf "\n${YELLOW}=== %s ===${RESET}\n" "$1"; }
+pass()         { printf "${GREEN}[PASS]${RESET} %s\n" "$1"; ((++PASS)); }
+fail()         { printf "${RED}[FAIL]${RESET} %s\n" "$1"; ((++FAIL)); }
+info()         { printf "${CYAN}[INFO]${RESET} %s\n" "$1"; }
+section()      { printf "\n${YELLOW}=== %s ===${RESET}\n" "$1"; }
+bpass()        { printf "${GREEN}[BONUS PASS]${RESET} %s\n" "$1"; ((++BONUS_PASS)); }
+bfail()        { printf "${MAGENTA}[BONUS FAIL]${RESET} %s\n" "$1"; ((++BONUS_FAIL)); }
+bonus_section(){ printf "\n${MAGENTA}=== BONUS: %s ===${RESET}\n" "$1"; }
 
 container_running() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${1}$"
@@ -160,7 +170,7 @@ fi
 # ── 8. MariaDB Health ─────────────────────────────────────────────────────────
 section "MariaDB"
 if container_running mariadb; then
-    db_ping=$(docker exec mariadb mysqladmin ping 2>/dev/null || echo "fail")
+    db_ping=$(docker exec mariadb sh -c 'mariadb-admin ping -uroot -p"$(cat /run/secrets/db_root_password)" --skip-ssl 2>/dev/null' || echo "fail")
     if echo "$db_ping" | grep -q "alive"; then
         pass "MariaDB is alive"
     else
@@ -199,8 +209,7 @@ if container_running mariadb; then
 
     # WordPress database must not be empty (connect via socket as root — no password needed from docker exec)
     mysql_db=$(grep "^WP_DATABASE=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "wordpress")
-    wp_tables=$(docker exec mariadb mysql -uroot --socket=/run/mysqld/mysqld.sock \
-        -e "SHOW TABLES FROM \`${mysql_db}\`;" 2>/dev/null | grep -vc "Tables_in" || true)
+    wp_tables=$(docker exec mariadb sh -c "mariadb -uroot -p\"\$(cat /run/secrets/db_root_password)\" --skip-ssl -e \"SHOW TABLES FROM \\\`${mysql_db}\\\`;\" 2>/dev/null" | grep -vc "Tables_in" || true)
     if [[ "$wp_tables" -gt 0 ]]; then
         pass "WordPress database '${mysql_db}' has ${wp_tables} table(s) — not empty"
     else
@@ -212,6 +221,7 @@ fi
 
 # ── 9. WordPress + php-fpm ────────────────────────────────────────────────────
 section "WordPress (php-fpm)"
+wp_path=$(grep "^DOMAIN_ROOT=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "/var/www/html")
 if container_running wordpress; then
     if docker exec wordpress php -v &>/dev/null; then
         pass "PHP is available in wordpress container"
@@ -230,8 +240,7 @@ if container_running wordpress; then
         pass "nginx is NOT inside wordpress container"
     fi
 
-    # WordPress must have exactly 2 users (admin + regular editor)
-    wp_path=$(grep "^DOMAIN_ROOT=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "/var/www/html")
+    # WordPress must have at least 2 users (admin + regular editor)
     wp_user_list=$(docker exec wordpress wp user list \
         --path="${wp_path:-/var/www/html}" \
         --fields=user_login,roles --allow-root 2>/dev/null || echo "")
@@ -248,26 +257,6 @@ if container_running wordpress; then
     else
         pass "No forbidden admin username variants in WordPress users"
     fi
-
-    # Active theme must be KALPA
-    if docker exec wordpress wp theme is-active kalpa \
-        --path="${wp_path:-/var/www/html}" \
-        --allow-root 2>/dev/null; then
-        pass "Active WordPress theme is KALPA"
-    else
-        fail "Active WordPress theme is NOT KALPA"
-    fi
-
-    # Required plugins must be active
-    for plugin in elementor wpkoi-templates-for-elementor; do
-        if docker exec wordpress wp plugin is-active "${plugin}" \
-            --path="${wp_path:-/var/www/html}" \
-            --allow-root 2>/dev/null; then
-            pass "Plugin '${plugin}' is active"
-        else
-            fail "Plugin '${plugin}' is not active"
-        fi
-    done
 else
     info "wordpress container not running — skipping php checks"
 fi
@@ -432,15 +421,116 @@ for svc in nginx wordpress mariadb; do
     fi
 done
 
+# ════════════════════════════════════════════════════════════════════════════
+# BONUS SECTION — tests below pass only when started with `make bonus`.
+# Failures here are expected in mandatory-only mode and do NOT affect exit code.
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── B1. Bonus Container Status ───────────────────────────────────────────────
+bonus_section "Container Status"
+if container_running ftp; then
+    bpass "Container 'ftp' is running"
+else
+    bfail "Container 'ftp' is NOT running (expected after 'make bonus')"
+fi
+
+# ── B2. FTP Accessibility ─────────────────────────────────────────────────────
+bonus_section "FTP Server"
+if container_running ftp; then
+    # Restart policy
+    ftp_policy=$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' ftp 2>/dev/null || echo "N/A")
+    if [[ "$ftp_policy" =~ ^(unless-stopped|always|on-failure)$ ]]; then
+        bpass "ftp restart policy: $ftp_policy"
+    else
+        bfail "ftp has no valid restart policy (got: '$ftp_policy')"
+    fi
+
+    # Port 21 must be exposed on the host
+    if docker ps --format '{{.Ports}}' | grep -q ':21->'; then
+        bpass "FTP port 21 is exposed on the host"
+    else
+        bfail "FTP port 21 is NOT exposed on the host"
+    fi
+
+    # Passive port range must be exposed
+    if docker ps --format '{{.Ports}}' | grep -q '21100-21110->'; then
+        bpass "FTP passive port range 21100-21110 is exposed"
+    else
+        bfail "FTP passive port range 21100-21110 is NOT exposed"
+    fi
+
+    # ftp container must be on the inception network
+    net_bonus=$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -i inception || true)
+    if [[ -n "$net_bonus" ]] && docker network inspect "$net_bonus" 2>/dev/null | grep -q '"ftp"'; then
+        bpass "ftp container is connected to $net_bonus"
+    else
+        bfail "ftp container is NOT connected to the inception network"
+    fi
+else
+    info "ftp container not running — skipping FTP checks"
+    bfail "FTP port 21 not tested (container not running)"
+    bfail "FTP passive port range not tested (container not running)"
+    bfail "FTP network not tested (container not running)"
+fi
+
+# ── B3. WordPress Bonus Theme & Plugins ───────────────────────────────────────
+bonus_section "WordPress Theme & Plugins"
+if container_running wordpress; then
+    # Active theme must be KALPA
+    if docker exec wordpress wp theme is-active kalpa \
+        --path="${wp_path:-/var/www/html}" \
+        --allow-root 2>/dev/null; then
+        bpass "Active WordPress theme is KALPA"
+    else
+        bfail "Active WordPress theme is NOT KALPA (expected after 'make bonus')"
+    fi
+
+    # Required bonus plugins must be active
+    for plugin in elementor wpkoi-templates-for-elementor; do
+        if docker exec wordpress wp plugin is-active "${plugin}" \
+            --path="${wp_path:-/var/www/html}" \
+            --allow-root 2>/dev/null; then
+            bpass "Plugin '${plugin}' is active"
+        else
+            bfail "Plugin '${plugin}' is not active (expected after 'make bonus')"
+        fi
+    done
+
+    # Cast users: bonus mode adds more than 2 users
+    wp_bonus_users=$(docker exec wordpress wp user list \
+        --path="${wp_path:-/var/www/html}" \
+        --fields=user_login --allow-root 2>/dev/null | grep -vc "user_login" || true)
+    if [[ "$wp_bonus_users" -gt 2 ]]; then
+        bpass "WordPress has $wp_bonus_users users — cast users present"
+    else
+        bfail "WordPress has only $wp_bonus_users user(s) — cast users not created (expected after 'make bonus')"
+    fi
+else
+    info "wordpress container not running — skipping bonus WordPress checks"
+    bfail "KALPA theme not tested (container not running)"
+    bfail "Elementor plugin not tested (container not running)"
+    bfail "wpkoi plugin not tested (container not running)"
+    bfail "Cast users not tested (container not running)"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf "\n${YELLOW}══════════════════════════════${RESET}\n"
-printf "${GREEN}PASSED: %-3d${RESET}  ${RED}FAILED: %-3d${RESET}\n" "$PASS" "$FAIL"
-printf "${YELLOW}══════════════════════════════${RESET}\n"
+printf "\n${YELLOW}══════════════════════════════════════════${RESET}\n"
+printf "  ${YELLOW}MANDATORY${RESET}  ${GREEN}PASSED: %-3d${RESET}  ${RED}FAILED: %-3d${RESET}\n" "$PASS" "$FAIL"
+printf "  ${MAGENTA}BONUS${RESET}      ${GREEN}PASSED: %-3d${RESET}  ${MAGENTA}FAILED: %-3d${RESET}\n" "$BONUS_PASS" "$BONUS_FAIL"
+printf "${YELLOW}══════════════════════════════════════════${RESET}\n"
 
 if [[ $FAIL -eq 0 ]]; then
-    printf "${GREEN}All checks passed! Inception is healthy.${RESET}\n"
+    printf "${GREEN}All mandatory checks passed! Inception is healthy.${RESET}\n"
+    if [[ $BONUS_FAIL -gt 0 ]]; then
+        printf "${MAGENTA}%d bonus check(s) failed — run 'make bonus' to enable bonus services.${RESET}\n" "$BONUS_FAIL"
+    else
+        printf "${GREEN}All bonus checks passed too!${RESET}\n"
+    fi
     exit 0
 else
-    printf "${RED}%d check(s) failed. Review the output above.${RESET}\n" "$FAIL"
+    printf "${RED}%d mandatory check(s) failed. Review the output above.${RESET}\n" "$FAIL"
+    if [[ $BONUS_FAIL -gt 0 ]]; then
+        printf "${MAGENTA}%d bonus check(s) also failed — run 'make bonus' to enable bonus services.${RESET}\n" "$BONUS_FAIL"
+    fi
     exit 1
 fi
