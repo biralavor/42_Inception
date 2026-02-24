@@ -144,4 +144,26 @@ else
     echo "WordPress already installed."
 fi
 
+# Set hero image as featured image of post 1 (idempotent)
+webp_seed="${WP_PATH}/wp-content/uploads/seed/Inception-deep-time-tester-object.webp"
+if [ -f "${webp_seed}" ]; then
+    existing=$(wp post meta get 1 _thumbnail_id \
+        --path="${WP_PATH}" --allow-root 2>/dev/null || echo "")
+    if [ -z "${existing}" ]; then
+        hero_id=$(wp media import "${webp_seed}" \
+            --path="${WP_PATH}" \
+            --allow-root \
+            --porcelain 2>/dev/null || echo "")
+        if [ -n "${hero_id}" ]; then
+            wp post meta update 1 _thumbnail_id "${hero_id}" \
+                --path="${WP_PATH}" --allow-root || true
+            echo "Featured image set on post 1 (attachment ${hero_id})."
+        else
+            echo "Hero image import failed — skipping featured image."
+        fi
+    else
+        echo "Post 1 already has a featured image — skipping."
+    fi
+fi
+
 exec php-fpm84 -F
