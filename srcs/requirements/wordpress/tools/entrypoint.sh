@@ -71,6 +71,19 @@ if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
         --role=author \
         --allow-root
 
+    # php-fpm runs as nobody — hand over ownership
+    chown -R nobody:nobody "${WP_PATH}"
+
+    echo "WordPress installation complete."
+else
+    echo "WordPress already installed."
+fi
+
+# Bonus setup — runs on every startup when BONUS_SETUP=true.
+# Theme/plugin installs are idempotent. Seed import and cast users use flag
+# files to prevent duplicate media entries on container restarts.
+# Override: BONUS_SETUP=true is injected by `make bonus` at runtime.
+if [ "${BONUS_SETUP:-false}" = "true" ]; then
     wp theme install kalpa \
         --path="${WP_PATH}" \
         --activate \
@@ -86,19 +99,26 @@ if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
         --activate \
         --allow-root
 
-    # Import seed images from FTP shared directory if present
-    if ls "${WP_PATH}/wp-content/uploads/seed/"*.jpg 2>/dev/null | head -1 | grep -q .; then
+    # Import seed images from FTP shared directory if present (once only)
+    SEED_FLAG="${WP_PATH}/.seed-imported"
+    set -- "${WP_PATH}/wp-content/uploads/seed/"*.jpg
+    if [ -f "$1" ] && [ ! -f "${SEED_FLAG}" ]; then
         wp media import "${WP_PATH}/wp-content/uploads/seed/"*.jpg \
             --path="${WP_PATH}" \
             --allow-root || true
+        touch "${SEED_FLAG}"
         echo "Seed images imported into WordPress media library."
     else
-        echo "No seed images found — skipping media import."
+        echo "No seed images found or already imported — skipping media import."
     fi
 
     # Create WordPress users from Inception cast images and set profile pictures
+    # Cast users have no password by design — display-only subscriber accounts.
+    # Flag file prevents duplicate avatar imports on container restarts.
     CAST_SRC="${WP_PATH}/wp-content/uploads/seed"
-    if ls "${CAST_SRC}"/cast-*.jpeg 2>/dev/null | head -1 | grep -q .; then
+    CAST_FLAG="${WP_PATH}/.cast-setup-done"
+    set -- "${CAST_SRC}"/cast-*.jpeg
+    if [ -f "$1" ] && [ ! -f "${CAST_FLAG}" ]; then
         wp plugin install simple-local-avatars \
             --path="${WP_PATH}" \
             --activate \
@@ -133,15 +153,12 @@ if ! wp core is-installed --path="${WP_PATH}" --allow-root 2>/dev/null; then
 
             echo "Cast user created: ${name}"
         done
+        touch "${CAST_FLAG}"
         echo "Cast users setup complete."
     fi
 
-    # php-fpm runs as nobody — hand over ownership
+    # Ensure php-fpm (nobody) owns any files added by bonus setup
     chown -R nobody:nobody "${WP_PATH}"
-
-    echo "WordPress installation complete."
-else
-    echo "WordPress already installed."
 fi
 
 # Set hero image as featured image of post 1 (idempotent)

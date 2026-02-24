@@ -48,6 +48,8 @@ services:
     secrets:
       - db_password
       - credentials
+    environment:
+      BONUS_SETUP: ${BONUS_SETUP:-false}
     restart: unless-stopped
 
   mariadb:

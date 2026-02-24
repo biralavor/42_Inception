@@ -69,6 +69,29 @@ make fclean
 make re
 ```
 
+### Bonus services
+
+The bonus stack adds an FTP server and a themed WordPress setup (Kalpa + Elementor + cast users) on top of the mandatory services.
+
+```bash
+# Start mandatory + all bonus services
+make bonus
+
+# Stop bonus services (keeps volumes)
+make bonus_down
+```
+
+**Switching between mandatory and bonus:**
+
+| Goal | Command |
+|------|---------|
+| Mandatory only (fresh) | `make fclean && make` |
+| Add bonus on top of running mandatory | `make bonus` |
+| Back to mandatory only | `make fclean && make` |
+| Fresh bonus build | `make fclean && make bonus` |
+
+> Both `make` and `make bonus` block until WordPress (php-fpm) is actually ready before printing the "up!" message. Wait for that message before opening the browser.
+
 ### Access
 
 - WordPress site: `https://login.42.fr`
