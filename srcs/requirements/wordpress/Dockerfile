@@ -37,4 +37,10 @@ RUN chmod +x /entrypoint.sh
 
 EXPOSE 9000
 
+# Healthy when php-fpm is actually accepting connections on port 9000.
+# --start-period gives the entrypoint time to run WP install / bonus setup
+# before health failures count against the retry limit.
+HEALTHCHECK --interval=5s --timeout=3s --start-period=120s --retries=3 \
+    CMD nc -z 127.0.0.1 9000 || exit 1
+
 ENTRYPOINT ["/entrypoint.sh"]
