@@ -69,6 +69,17 @@ services:
       - db_root_password
     restart: unless-stopped
 
+  redis:
+    build:
+      context: ./bonus/redis
+      dockerfile: Dockerfile
+    image: redis_bonus
+    container_name: redis
+    profiles: [bonus]
+    networks:
+      - inception_network
+    restart: unless-stopped
+
   ftp:
     build:
       context: ./bonus/ftp
