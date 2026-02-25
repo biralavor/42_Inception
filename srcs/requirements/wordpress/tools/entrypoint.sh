@@ -99,6 +99,19 @@ if [ "${BONUS_SETUP:-false}" = "true" ]; then
         --activate \
         --allow-root
 
+    wp config set WP_REDIS_HOST "${WP_REDIS_HOST:-redis}" \
+        --path="${WP_PATH}" \
+        --allow-root
+
+    wp plugin install redis-cache \
+        --path="${WP_PATH}" \
+        --activate \
+        --allow-root
+
+    wp redis enable \
+        --path="${WP_PATH}" \
+        --allow-root
+
     # Import seed images from FTP shared directory if present (once only)
     SEED_FLAG="${WP_PATH}/.seed-imported"
     set -- "${WP_PATH}/wp-content/uploads/seed/"*.jpg

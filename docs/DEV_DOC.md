@@ -242,17 +242,31 @@ docker volume ls | grep inception
 
 ## Adding a Bonus Service
 
-Follow this pattern for any new container:
+Bonus services live under `srcs/bonus/<service>/` and are gated behind the `bonus` Docker Compose profile. They only start when `make bonus` is run — plain `make` never starts them.
 
-1. Create `srcs/requirements/bonus/<service>/Dockerfile` — FROM a pinned Alpine/Debian version, no `:latest`
-2. Add the service to `srcs/docker-compose.yml` under `services:` with:
-   - `build.context: ./requirements/bonus/<service>`
-   - `networks: inception_network`
-   - `restart: unless-stopped`
-   - No passwords in the compose file — use `secrets:` or `env_file:`
-3. If it needs a volume, declare it under `volumes:` and mount it
-4. Open only the ports it actually needs
-5. Run `make re` to rebuild and verify
+**Step-by-step pattern:**
+
+1. Create `srcs/bonus/<service>/Dockerfile` — `FROM` a pinned Alpine/Debian version, never `:latest`
+2. Add the service to `srcs/docker-compose.yml` under `services:` with **all four of these**:
+   ```yaml
+     <service>:
+       build:
+         context: ./bonus/<service>
+         dockerfile: Dockerfile
+       image: <service>_bonus        # avoid colliding with official DockerHub image names
+       container_name: <service>
+       profiles: [bonus]             # REQUIRED — prevents starting with plain `make`
+       networks:
+         - inception_network
+       restart: unless-stopped
+   ```
+3. Add only the ports the service actually needs — or none if it is internal-only
+4. If it needs a volume, declare it under `volumes:` and mount it; if the data is ephemeral, omit the volume
+5. If it needs credentials, add a secret under `secrets:` — never hardcode passwords
+6. If it installs WordPress plugins/themes, add the install commands inside the `BONUS_SETUP` block in `srcs/requirements/wordpress/tools/entrypoint.sh` (gated on `[ "${BONUS_SETUP:-false}" = "true" ]`)
+7. Rebuild and verify with `make fclean && make bonus`
+
+> **Why `profiles: [bonus]` matters:** without it the service starts with plain `make`, collapsing the mandatory/bonus separation. Every bonus service must carry this key.
 
 ---
 
