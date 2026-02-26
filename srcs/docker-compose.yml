@@ -26,7 +26,7 @@ services:
     env_file:
       - ./.env
     volumes:
-      - wordpress_data:/var/www/html
+      - ${DATA_PATH}/wordpress:/var/www/html
     networks:
       - inception_network
     restart: unless-stopped
@@ -40,7 +40,7 @@ services:
     depends_on:
       - mariadb
     volumes:
-      - wordpress_data:/var/www/html
+      - ${DATA_PATH}/wordpress:/var/www/html
     networks:
       - inception_network
     env_file:
@@ -59,7 +59,7 @@ services:
     image: mariadb
     container_name: mariadb
     volumes:
-      - db_data:/var/lib/mysql
+      - ${DATA_PATH}/mariadb:/var/lib/mysql
     networks:
       - inception_network
     env_file:
@@ -88,7 +88,7 @@ services:
     container_name: ftp
     profiles: [bonus]
     volumes:
-      - wordpress_data:/var/www/html
+      - ${DATA_PATH}/wordpress:/var/www/html
     ports:
       - "21:21"
       - "21100-21110:21100-21110"
@@ -105,16 +105,3 @@ networks:
     name: inception_network
     driver: bridge
 
-volumes:
-  wordpress_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH}/wordpress
-  db_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH}/mariadb
