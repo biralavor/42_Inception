@@ -120,13 +120,13 @@ fi
 
 # ── 6. Docker Volumes ─────────────────────────────────────────────────────────
 section "Docker Volumes"
-existing_vols=$(docker volume ls --format '{{.Name}}' 2>/dev/null)
-for vol in wordpress_data db_data; do
-    match=$(echo "$existing_vols" | grep "$vol" || true)
-    if [[ -n "$match" ]]; then
-        pass "Volume found: $match"
+# Volumes use direct bind mounts (not named volumes); verify containers have bind mounts
+for svc in wordpress mariadb; do
+    bind_src=$(docker inspect "$svc" --format '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}} {{end}}{{end}}' 2>/dev/null | tr ' ' '\n' | grep -v "^$" | head -1 || true)
+    if [[ -n "$bind_src" ]]; then
+        pass "Container '$svc' uses bind mount: $bind_src"
     else
-        fail "Volume '$vol' not found"
+        fail "Container '$svc' has no bind mount (data persistence may be missing)"
     fi
 done
 

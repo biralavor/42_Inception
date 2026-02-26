@@ -16,7 +16,9 @@ RUN apk add --no-cache \
     php84-intl \
     php84-fileinfo \
     php84-phar \
+    php84-ctype \
     php84-redis \
+    php84-tokenizer \
     wget \
     mariadb-client
 

@@ -79,6 +79,16 @@ else
     echo "WordPress already installed."
 fi
 
+# Start php-fpm in the background NOW so port 9000 opens immediately.
+# WP-CLI (used in bonus setup below) is a PHP CLI tool — it does NOT need
+# php-fpm. Starting php-fpm first lets the Docker health check pass while
+# bonus plugin downloads run concurrently.
+_term() { kill -TERM "$PHP_PID" 2>/dev/null; }
+trap _term TERM INT
+
+php-fpm84 -F &
+PHP_PID=$!
+
 # Bonus setup — runs on every startup when BONUS_SETUP=true.
 # Theme/plugin installs are idempotent. Seed import and cast users use flag
 # files to prevent duplicate media entries on container restarts.
@@ -144,7 +154,6 @@ if [ "${BONUS_SETUP:-false}" = "true" ]; then
             wp user create "${username}" "${username}@${DOMAIN}" \
                 --display_name="${name}" \
                 --role=subscriber \
-                --skip-email \
                 --path="${WP_PATH}" \
                 --allow-root 2>/dev/null || true
 
@@ -196,4 +205,4 @@ if [ -f "${webp_seed}" ]; then
     fi
 fi
 
-exec php-fpm84 -F
+wait "$PHP_PID"
