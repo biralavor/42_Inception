@@ -1,18 +1,8 @@
 #!/bin/sh
 set -e
 
-# Read DB password from Docker secret
-DB_PASSWORD=$(cat /run/secrets/db_password)
-
-# Read WP credentials from Docker secret (one value per line):
-#   Line 1 - admin login     (must NOT be 'admin', 'Admin', 'administrator')
-#   Line 2 - admin password
-#   Line 3 - regular user login
-#   Line 4 - regular user password
-WP_ADMIN_USER=$(sed -n '1p' /run/secrets/credentials)
-WP_ADMIN_PASS=$(sed -n '2p' /run/secrets/credentials)
-WP_EDITOR=$(sed -n '3p' /run/secrets/credentials)
-WP_EDITOR_PASS=$(sed -n '4p' /run/secrets/credentials)
+# All credentials injected from srcs/.env via env_file in docker-compose.yml:
+#   DB_PASSWORD, WP_ADMIN_USER, WP_ADMIN_PASS, WP_EDITOR, WP_EDITOR_PASS
 
 # Non-sensitive config from environment (.env)
 # NOTE: WP_USER here is the DB username from .env, not the WP application user
