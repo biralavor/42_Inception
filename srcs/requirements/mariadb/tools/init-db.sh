@@ -1,9 +1,8 @@
 #!/bin/sh
 set -e
 
-# Read credentials from Docker secret files
-DB_ROOT_PASSWORD=$(cat /run/secrets/db_root_password)
-DB_PASSWORD=$(cat /run/secrets/db_password)
+# Credentials injected from srcs/.env via env_file in docker-compose.yml
+# DB_ROOT_PASSWORD and DB_PASSWORD are available as environment variables
 
 # Non-sensitive config from environment (.env)
 DB_NAME="${MARIADB_DATABASE:-wordpress}"
