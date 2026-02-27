@@ -140,6 +140,19 @@ if [ "${BONUS_SETUP:-false}" = "true" ]; then
     # Flag file prevents duplicate avatar imports on container restarts.
     CAST_SRC="${WP_PATH}/wp-content/uploads/seed"
     CAST_FLAG="${WP_PATH}/.cast-setup-done"
+
+    # Wait up to 30 seconds for FTP to copy cast images into the shared volume
+    if [ ! -f "${CAST_FLAG}" ]; then
+        i=0
+        while [ $i -lt 30 ]; do
+            set -- "${CAST_SRC}"/cast-*.jpeg
+            [ -f "$1" ] && break
+            sleep 1
+            i=$((i+1))
+        done
+        echo "Cast seed files ready (waited ${i}s)."
+    fi
+
     set -- "${CAST_SRC}"/cast-*.jpeg
     if [ -f "$1" ] && [ ! -f "${CAST_FLAG}" ]; then
         wp plugin install simple-local-avatars \

@@ -100,6 +100,19 @@ services:
       - inception_network
     restart: unless-stopped
 
+  static:
+    build:
+      context: ./bonus
+      dockerfile: static/Dockerfile
+    image: static
+    container_name: static
+    profiles: [bonus]
+    ports:
+      - "8888:8888"
+    networks:
+      - inception_network
+    restart: unless-stopped
+
 networks:
   inception_network:
     name: inception_network
