@@ -17,10 +17,15 @@ server {
         try_files $uri $uri/ /index.php?$args;
     }
 
-    # Pass PHP requests to php-fpm in the wordpress container
+    # Pass PHP requests to php-fpm in the wordpress container.
+    # resolver + variable forces nginx to re-resolve 'wordpress' via Docker DNS
+    # on every request, so it recovers immediately when the container is recreated.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
     location ~ \.php$ {
         try_files      $uri =404;
-        fastcgi_pass   wordpress:9000;
+        set            $php_upstream wordpress;
+        fastcgi_pass   $php_upstream:9000;
         fastcgi_index  index.php;
         include        fastcgi_params;
         fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;

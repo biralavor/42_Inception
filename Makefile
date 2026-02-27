@@ -20,9 +20,10 @@ dirs:
 	@printf "$(CYAN)Host data directories ready.$(RESET)\n"
 
 # Stop containers, keep volumes and images
+# --profile bonus ensures bonus containers (ftp, redis, static) are also stopped
 .PHONY: down
 down:
-	$(COMPOSE) down
+	$(COMPOSE) --profile bonus down
 	@printf "$(YELLOW)Inception stopped.$(RESET)\n"
 
 # Stop + remove containers and networks (keep volumes and images)
@@ -51,7 +52,10 @@ re: fclean all
 .PHONY: bonus
 bonus: dirs
 	BONUS_SETUP=true $(COMPOSE) --profile bonus up -d --build --wait
-	@printf "$(GREEN)Inception with bonus services is up!$(RESET)\n"
+	@printf "$(CYAN)Waiting for bonus setup to complete...$(RESET)\n"
+	@timeout 180 sh -c 'until docker exec wordpress wp plugin is-active elementor --path=/var/www/html --allow-root 2>/dev/null; do sleep 5; done' \
+		&& printf "$(GREEN)Inception with bonus services is up!$(RESET)\n" \
+		|| printf "$(YELLOW)Warning: bonus setup timed out — plugins may still be installing.$(RESET)\n"
 
 # Stop bonus services only
 .PHONY: bonus_down

@@ -170,7 +170,7 @@ fi
 # ── 8. MariaDB Health ─────────────────────────────────────────────────────────
 section "MariaDB"
 if container_running mariadb; then
-    db_ping=$(docker exec mariadb sh -c 'mariadb-admin ping -uroot -p"$(cat /run/secrets/db_root_password)" --skip-ssl 2>/dev/null' || echo "fail")
+    db_ping=$(docker exec mariadb sh -c 'mariadb-admin ping -uroot -p"${DB_ROOT_PASSWORD}" --skip-ssl 2>/dev/null' || echo "fail")
     if echo "$db_ping" | grep -q "alive"; then
         pass "MariaDB is alive"
     else
@@ -209,7 +209,7 @@ if container_running mariadb; then
 
     # WordPress database must not be empty (connect via socket as root — no password needed from docker exec)
     mysql_db=$(grep "^WP_DATABASE=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "wordpress")
-    wp_tables=$(docker exec mariadb sh -c "mariadb -uroot -p\"\$(cat /run/secrets/db_root_password)\" --skip-ssl -e \"SHOW TABLES FROM \\\`${mysql_db}\\\`;\" 2>/dev/null" | grep -vc "Tables_in" || true)
+    wp_tables=$(docker exec mariadb sh -c "mariadb -uroot -p\"\${DB_ROOT_PASSWORD}\" --skip-ssl -e \"SHOW TABLES FROM \\\`${mysql_db}\\\`;\" 2>/dev/null" | grep -vc "Tables_in" || true)
     if [[ "$wp_tables" -gt 0 ]]; then
         pass "WordPress database '${mysql_db}' has ${wp_tables} table(s) — not empty"
     else
@@ -330,20 +330,18 @@ fi
 
 # ── 12. Secrets & Environment Files ──────────────────────────────────────────
 section "Secrets & Environment"
-for secret in secrets/db_password.txt secrets/db_root_password.txt secrets/credentials.txt; do
-    if [[ -f "$secret" && -s "$secret" ]]; then
-        pass "Secret file exists and non-empty: $secret"
-    elif [[ -f "$secret" ]]; then
-        fail "Secret file exists but is EMPTY: $secret"
-    else
-        fail "Secret file missing: $secret"
-    fi
-done
-
 if [[ -f "srcs/.env" ]]; then
     pass "srcs/.env exists"
+    for var in DB_PASSWORD DB_ROOT_PASSWORD WP_ADMIN_USER WP_ADMIN_PASS WP_EDITOR WP_EDITOR_PASS; do
+        value=$(grep "^${var}=" srcs/.env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "")
+        if [[ -n "$value" ]]; then
+            pass "srcs/.env: ${var} is set"
+        else
+            fail "srcs/.env: ${var} is missing or empty"
+        fi
+    done
 else
-    fail "srcs/.env missing"
+    fail "srcs/.env missing (copy srcs/.env.example and fill in credentials)"
 fi
 
 # Secrets must not be tracked by git
