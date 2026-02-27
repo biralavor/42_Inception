@@ -1,16 +1,5 @@
 name: inception
 
-# Secrets: mounted as files at /run/secrets/<name> inside the container
-secrets:
-  db_password:
-    file: ../secrets/db_password.txt
-  db_root_password:
-    file: ../secrets/db_root_password.txt
-  credentials:
-    file: ../secrets/credentials.txt
-  ftp_password:
-    file: ../secrets/ftp_password.txt
-
 services:
 
   nginx:
@@ -45,9 +34,6 @@ services:
       - inception_network
     env_file:
       - ./.env
-    secrets:
-      - db_password
-      - credentials
     environment:
       BONUS_SETUP: ${BONUS_SETUP:-false}
     restart: unless-stopped
@@ -64,9 +50,6 @@ services:
       - inception_network
     env_file:
       - ./.env
-    secrets:
-      - db_password
-      - db_root_password
     restart: unless-stopped
 
   redis:
@@ -94,8 +77,6 @@ services:
       - "21100-21110:21100-21110"
     env_file:
       - ./.env
-    secrets:
-      - ftp_password
     networks:
       - inception_network
     restart: unless-stopped

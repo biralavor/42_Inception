@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-FTP_PASS=$(cat /run/secrets/ftp_password)
+FTP_PASS="${FTP_PASSWORD}"
 FTP_USER="${FTP_USER:-ftpuser}"
 
 # Create FTP user with home dir = WordPress webroot
