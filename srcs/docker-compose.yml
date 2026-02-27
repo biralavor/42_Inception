@@ -1,14 +1,5 @@
 name: inception
 
-# Secrets: mounted as files at /run/secrets/<name> inside the container
-secrets:
-  db_password:
-    file: ../secrets/db_password.txt
-  db_root_password:
-    file: ../secrets/db_root_password.txt
-  credentials:
-    file: ../secrets/credentials.txt
-
 services:
 
   nginx:
@@ -24,7 +15,7 @@ services:
     env_file:
       - ./.env
     volumes:
-      - wordpress_data:/var/www/html
+      - ${DATA_PATH}/wordpress:/var/www/html
     networks:
       - inception_network
     restart: unless-stopped
@@ -38,14 +29,13 @@ services:
     depends_on:
       - mariadb
     volumes:
-      - wordpress_data:/var/www/html
+      - ${DATA_PATH}/wordpress:/var/www/html
     networks:
       - inception_network
     env_file:
       - ./.env
-    secrets:
-      - db_password
-      - credentials
+    environment:
+      BONUS_SETUP: ${BONUS_SETUP:-false}
     restart: unless-stopped
 
   mariadb:
@@ -55,14 +45,53 @@ services:
     image: mariadb
     container_name: mariadb
     volumes:
-      - db_data:/var/lib/mysql
+      - ${DATA_PATH}/mariadb:/var/lib/mysql
     networks:
       - inception_network
     env_file:
       - ./.env
-    secrets:
-      - db_password
-      - db_root_password
+    restart: unless-stopped
+
+  redis:
+    build:
+      context: ./bonus/redis
+      dockerfile: Dockerfile
+    image: redis_bonus
+    container_name: redis
+    profiles: [bonus]
+    networks:
+      - inception_network
+    restart: unless-stopped
+
+  ftp:
+    build:
+      context: ./bonus/ftp
+      dockerfile: Dockerfile
+    image: ftp
+    container_name: ftp
+    profiles: [bonus]
+    volumes:
+      - ${DATA_PATH}/wordpress:/var/www/html
+    ports:
+      - "21:21"
+      - "21100-21110:21100-21110"
+    env_file:
+      - ./.env
+    networks:
+      - inception_network
+    restart: unless-stopped
+
+  static:
+    build:
+      context: ./bonus
+      dockerfile: static/Dockerfile
+    image: static
+    container_name: static
+    profiles: [bonus]
+    ports:
+      - "8888:8888"
+    networks:
+      - inception_network
     restart: unless-stopped
 
 networks:
@@ -70,16 +99,3 @@ networks:
     name: inception_network
     driver: bridge
 
-volumes:
-  wordpress_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH}/wordpress
-  db_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH}/mariadb
