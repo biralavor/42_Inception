@@ -25,48 +25,39 @@ git clone <repo-url> 42_Inception
 cd 42_Inception
 ```
 
-### 2. Create secret files
+### 2. Create `srcs/.env`
 
-These files are **never committed** (covered by `.gitignore`). Create them manually:
+Copy the template and fill in every credential before running `make`:
 
 ```bash
-# WordPress admin + editor credentials
-# Line 1: admin username (must NOT contain 'admin', 'Admin', 'administrator')
-# Line 2: admin password
-# Line 3: editor username
-# Line 4: editor password
-cat > secrets/credentials.txt << 'EOF'
-wpmaster
-StrongAdminPass42!
-wreditor
-StrongEditorPass42!
-EOF
-
-# MariaDB password for the WordPress user
-echo "StrongDbPass42!" > secrets/db_password.txt
-
-# MariaDB root password
-echo "StrongRootPass42!" > secrets/db_root_password.txt
-
-# FTP user password (bonus)
-echo "StrongFtpPass42!" > secrets/ftp_password.txt
+cp srcs/.env.example srcs/.env
+$EDITOR srcs/.env
 ```
+
+The file is **never committed** (covered by `.gitignore`).
 
 ### 3. Review `srcs/.env`
 
-The `.env` file holds non-sensitive configuration. Key variables:
+`srcs/.env` holds all configuration — both non-sensitive settings and credentials:
 
-| Variable | Default value | Purpose |
+| Variable | Example value | Purpose |
 |----------|--------------|---------|
-| `DOMAIN_NAME` | `umeneses.42.fr` | WordPress site URL and nginx server name |
-| `DATA_PATH` | `/home/biralavor/data` | Host path for persistent volume data |
+| `DOMAIN_NAME` | `login.42.fr` | WordPress site URL and nginx server name |
+| `DATA_PATH` | `/home/<login>/data` | Host path for persistent volume data |
 | `WP_DATABASE` | `wordpress` | WordPress database name |
 | `WP_USER` | `wp_user` | WordPress database username |
 | `WP_HOST` | `mariadb` | Database hostname (must match container name) |
 | `FTP_USER` | `ftpuser` | FTP username *(bonus)* |
 | `WP_REDIS_HOST` | `redis` | Redis hostname for WordPress object cache *(bonus)* |
+| `DB_PASSWORD` | *(your choice)* | MariaDB password for the WordPress user |
+| `DB_ROOT_PASSWORD` | *(your choice)* | MariaDB root password |
+| `WP_ADMIN_USER` | *(your choice)* | WordPress admin login (must NOT be `admin`/`administrator`) |
+| `WP_ADMIN_PASS` | *(your choice)* | WordPress admin password |
+| `WP_EDITOR` | *(your choice)* | WordPress editor username |
+| `WP_EDITOR_PASS` | *(your choice)* | WordPress editor password |
+| `FTP_PASSWORD` | *(your choice)* | FTP user password *(bonus)* |
 
-Adjust `DATA_PATH` if your home directory differs.
+Adjust `DATA_PATH` and `DOMAIN_NAME` to match your machine and login.
 
 ### 4. Add the domain to `/etc/hosts`
 
@@ -163,7 +154,8 @@ docker exec wordpress wp user list --path=/var/www/html --allow-root
 ### Query MariaDB directly
 
 ```bash
-docker exec mariadb mysql -uroot -p$(cat secrets/db_root_password.txt) \
+source srcs/.env
+docker exec mariadb mysql -uroot -p"${DB_ROOT_PASSWORD}" \
     --socket=/run/mysqld/mysqld.sock wordpress -e "SHOW TABLES;"
 ```
 
@@ -270,7 +262,7 @@ Bonus services live under `srcs/bonus/<service>/` and are gated behind the `bonu
    ```
 3. Add only the ports the service actually needs — or none if it is internal-only
 4. If it needs a volume, declare it under `volumes:` and mount it; if the data is ephemeral, omit the volume
-5. If it needs credentials, add a secret under `secrets:` — never hardcode passwords
+5. If it needs credentials, add a variable to `srcs/.env` — never hardcode passwords in Dockerfiles or `docker-compose.yml`
 6. If it installs WordPress plugins/themes, add the install commands inside the `BONUS_SETUP` block in `srcs/requirements/wordpress/tools/entrypoint.sh` (gated on `[ "${BONUS_SETUP:-false}" = "true" ]`)
 7. Rebuild and verify with `make fclean && make bonus`
 
