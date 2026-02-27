@@ -6,6 +6,8 @@ secrets/
 
 # Environment files with sensitive data
 .env
+srcs/.env
+srcs/.env_backup
 
 # Docker volumes
 data/
