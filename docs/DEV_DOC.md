@@ -199,7 +199,15 @@ Default `DATA_PATH=/home/biralavor/data`, so data lives at:
 
 ### How persistence works
 
-The volumes use `driver: local` with `type: none` (bind-mount). Docker mounts the host directories directly into the containers. Stopping containers (`make down`) does **not** delete data — only `make fclean` wipes the host directories.
+Volumes are **direct bind mounts** — no named Docker volumes. Docker Engine (Linux) mounts the host directories straight into the containers:
+
+```yaml
+volumes:
+  - ${DATA_PATH}/wordpress:/var/www/html
+  - ${DATA_PATH}/mariadb:/var/lib/mysql
+```
+
+Stopping containers (`make down`) does **not** delete data — only `make fclean` wipes the host directories.
 
 ### Reset data without removing images
 
@@ -209,10 +217,10 @@ sudo rm -rf ${DATA_PATH}/wordpress ${DATA_PATH}/mariadb   # wipe data only
 make                                           # restart — WordPress reinstalls
 ```
 
-### List Docker volumes
+### Inspect bind mounts
 
 ```bash
-docker volume ls | grep inception
+docker inspect wordpress --format '{{json .Mounts}}' | python3 -m json.tool
 ```
 
 ---

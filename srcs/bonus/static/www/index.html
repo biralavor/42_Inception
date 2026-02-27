@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>42 — Inception</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <section class="hero">
+        <div class="hero-overlay"></div>
+        <div class="hero-text">
+            <h1>42 Inception</h1>
+            <p class="tagline">A containerized infrastructure project.</p>
+        </div>
+    </section>
+
+    <main>
+        <section class="card">
+            <h2>About</h2>
+            <p>Served by Alpine + nginx on port 8888. No PHP, no backend, no database.</p>
+        </section>
+
+        <section class="card">
+            <h2>Stack</h2>
+            <ul>
+                <li>nginx — reverse proxy + TLS entrypoint (port 443)</li>
+                <li>WordPress — php-fpm application (port 9000 internal)</li>
+                <li>MariaDB — relational database (port 3306 internal)</li>
+                <li>Redis — object cache (port 6379 internal)</li>
+                <li>FTP — file access to WordPress volume (port 21)</li>
+                <li>Static — this page (port 8888)</li>
+            </ul>
+        </section>
+
+        <section class="card">
+            <h2>Music</h2>
+            <p class="audio-note">Click play to start the Inception soundtrack.</p>
+            <audio id="bg-audio" loop>
+                <source src="Inception-Half-Remembered-Dream.mp3" type="audio/mpeg">
+            </audio>
+            <button class="audio-btn" id="audio-btn">&#9654; Play Music</button>
+        </section>
+    </main>
+
+    <footer><p>42 School &mdash; Inception Project &mdash; 2026</p></footer>
+
+    <!-- Floating pill: visible at all times, updates when audio state changes -->
+    <button class="audio-float" id="audio-float" aria-label="Toggle music">&#9654;</button>
+
+    <script>
+        const audio = document.getElementById('bg-audio');
+        const btn   = document.getElementById('audio-btn');
+        const flt   = document.getElementById('audio-float');
+
+        function setPlaying(playing) {
+            btn.textContent = playing ? '\u23F8 Pause Music' : '\u25B6 Play Music';
+            flt.textContent = playing ? '\u23F8' : '\u25B6';
+            flt.classList.toggle('playing', playing);
+        }
+
+        function toggle() {
+            if (audio.paused) {
+                audio.play().then(() => setPlaying(true)).catch(() => {});
+            } else {
+                audio.pause();
+                setPlaying(false);
+            }
+        }
+
+        btn.addEventListener('click', toggle);
+        flt.addEventListener('click', toggle);
+        audio.addEventListener('pause', () => setPlaying(false));
+        audio.addEventListener('play',  () => setPlaying(true));
+
+        // Attempt autoplay on load; floating button is the fallback
+        window.addEventListener('load', () => {
+            audio.play().catch(() => { setPlaying(false); });
+        });
+    </script>
+
+</body>
+</html>
