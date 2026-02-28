@@ -11,6 +11,7 @@ The Inception stack runs the following containers:
 | **mariadb** | Relational database for WordPress          | Internal only (port 3306)       |
 | **redis** *(bonus)* | Object cache for WordPress        | Internal only (port 6379)       |
 | **ftp** *(bonus)*   | FTP access to the WordPress volume  | `ftp://localhost` (port 21)     |
+| **adminer** *(bonus)* | MariaDB web GUI                 | `http://localhost:8080`         |
 | **static** *(bonus)*  | Static showcase site with audio   | `http://localhost:8888`         |
 
 All containers restart automatically on crash.
@@ -95,6 +96,24 @@ https://umeneses.42.fr/wp-admin
 
 Log in with `WP_ADMIN_USER` and `WP_ADMIN_PASS` from `srcs/.env`.
 
+### Adminer — MariaDB GUI *(bonus)*
+
+```
+http://localhost:8080
+```
+
+Log in with the following values:
+
+| Field    | Value                                                   |
+|----------|---------------------------------------------------------|
+| System   | MySQL                                                   |
+| Server   | `mariadb`                                               |
+| Username | value of `MYSQL_USER` in `srcs/.env`                   |
+| Password | value of `DB_PASSWORD` in `srcs/.env`                  |
+| Database | value of `WP_DATABASE` in `srcs/.env`                  |
+
+> Adminer has no TLS. This is acceptable for 42 evaluation — the subject mandates TLS only on port 443.
+
 ### Static Site *(bonus)*
 
 ```
@@ -159,6 +178,7 @@ The check verifies:
 - WordPress has the required users (admin + editor)
 - KALPA theme is active; Elementor and WPKoi plugins are active
 - Redis cache is connected *(bonus)*
+- Adminer is reachable on port 8080 *(bonus)*
 - No Dockerfiles use `:latest` tags or hardcoded credentials
 - No forbidden patterns (`network: host`, `--link`, infinite loops)
 

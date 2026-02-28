@@ -81,6 +81,21 @@ services:
       - inception_network
     restart: unless-stopped
 
+  adminer:
+    build:
+      context: ./bonus/adminer
+      dockerfile: Dockerfile
+    image: adminer
+    container_name: adminer
+    profiles: [bonus]
+    depends_on:
+      - mariadb
+    ports:
+      - "8080:8080"
+    networks:
+      - inception_network
+    restart: unless-stopped
+
   static:
     build:
       context: ./bonus

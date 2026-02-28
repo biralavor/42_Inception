@@ -20,9 +20,11 @@ dirs:
 	@printf "$(CYAN)Host data directories ready.$(RESET)\n"
 
 # Stop containers, keep volumes and images
+# --profile bonus ensures bonus containers (ftp, redis, adminer, static) are
+# stopped too — preventing stale bind mounts after make fclean.
 .PHONY: down
 down:
-	$(COMPOSE) down
+	$(COMPOSE) --profile bonus down
 	@printf "$(YELLOW)Inception stopped.$(RESET)\n"
 
 # Stop + remove containers and networks (keep volumes and images)
@@ -47,11 +49,23 @@ fclean: clean
 .PHONY: re
 re: fclean all
 
-# Start mandatory + all bonus services
+# Start mandatory + all bonus services.
+# After --wait (containers healthy), poll the bind-mount flag that the
+# wordpress entrypoint touches when bonus setup fully completes (plugins,
+# cast users, etc.).  Timeout: 180 s — enough for a cold plugin download.
 .PHONY: bonus
 bonus: dirs
 	BONUS_SETUP=true $(COMPOSE) --profile bonus up -d --build --wait
-	@printf "$(GREEN)Inception with bonus services is up!$(RESET)\n"
+	@printf "$(CYAN)Waiting for WordPress bonus setup to finish...$(RESET)\n"; \
+	i=0; \
+	while [ $$i -lt 180 ] && [ ! -f $(DATA_DIR)/wordpress/.bonus-setup-done ]; do \
+		sleep 2; i=$$((i + 2)); \
+	done; \
+	if [ -f $(DATA_DIR)/wordpress/.bonus-setup-done ]; then \
+		printf "$(GREEN)Inception with bonus services is up!$(RESET)\n"; \
+	else \
+		printf "$(YELLOW)Warning: bonus setup did not finish in 180 s — run 'make logs' to debug$(RESET)\n"; \
+	fi
 
 # Stop bonus services only
 .PHONY: bonus_down
