@@ -11,7 +11,7 @@ The Inception stack runs the following containers:
 | **mariadb** | Relational database for WordPress          | Internal only (port 3306)       |
 | **redis** *(bonus)* | Object cache for WordPress        | Internal only (port 6379)       |
 | **ftp** *(bonus)*   | FTP access to the WordPress volume  | `ftp://localhost` (port 21)     |
-| **adminer** *(bonus)* | Web-based database GUI            | `http://localhost:8080`         |
+| **adminer** *(bonus)* | MariaDB web GUI                 | `http://localhost:8080`         |
 | **static** *(bonus)*  | Static showcase site with audio   | `http://localhost:8888`         |
 
 All containers restart automatically on crash.
@@ -94,23 +94,25 @@ Requires `umeneses.42.fr` to resolve to `127.0.0.1` in `/etc/hosts` (see [Develo
 https://umeneses.42.fr/wp-admin
 ```
 
-Log in with the admin credentials from `secrets/credentials.txt` (lines 1 and 2).
+Log in with `WP_ADMIN_USER` and `WP_ADMIN_PASS` from `srcs/.env`.
 
-### Adminer (database GUI) *(bonus)*
+### Adminer — MariaDB GUI *(bonus)*
 
 ```
 http://localhost:8080
 ```
 
-Login fields:
+Log in with the following values:
 
-| Field    | Value                                      |
-|----------|--------------------------------------------|
-| System   | MySQL                                      |
-| Server   | `mariadb`                                  |
-| Username | `wp_user` (from `srcs/.env`)               |
-| Password | content of `secrets/db_password.txt`       |
-| Database | `wordpress` (from `srcs/.env`)             |
+| Field    | Value                                                   |
+|----------|---------------------------------------------------------|
+| System   | MySQL                                                   |
+| Server   | `mariadb`                                               |
+| Username | value of `MYSQL_USER` in `srcs/.env`                   |
+| Password | value of `DB_PASSWORD` in `srcs/.env`                  |
+| Database | value of `WP_DATABASE` in `srcs/.env`                  |
+
+> Adminer has no TLS. This is acceptable for 42 evaluation — the subject mandates TLS only on port 443.
 
 ### Static Site *(bonus)*
 
@@ -124,26 +126,28 @@ http://localhost:8888
 ftp://localhost
 ```
 
-Connect with the username and password from `secrets/ftp_password.txt`. The FTP root is the WordPress web root (`/var/www/html`).
+Connect with `FTP_USER` and `FTP_PASSWORD` from `srcs/.env`. The FTP root is the WordPress web root (`/var/www/html`).
 
 ---
 
 ## Credentials
 
-All credentials are stored in the `secrets/` directory at the repository root. These files are **never committed to git**.
-
-| File | Contents |
-|------|----------|
-| `secrets/credentials.txt` | Line 1: WordPress admin username<br>Line 2: WordPress admin password<br>Line 3: WordPress editor username<br>Line 4: WordPress editor password |
-| `secrets/db_password.txt` | MariaDB password for the WordPress database user |
-| `secrets/db_root_password.txt` | MariaDB root password |
-| `secrets/ftp_password.txt` | FTP user password *(bonus)* |
-
-To read a credential:
+All credentials are stored in `srcs/.env`, which is **never committed to git**. Copy the template and fill in your values before starting the stack:
 
 ```bash
-cat secrets/db_password.txt
+cp srcs/.env.example srcs/.env
+$EDITOR srcs/.env
 ```
+
+| Variable | Purpose |
+|----------|---------|
+| `DB_PASSWORD` | MariaDB password for the WordPress database user |
+| `DB_ROOT_PASSWORD` | MariaDB root password |
+| `WP_ADMIN_USER` | WordPress admin login (must NOT be `admin`/`administrator`) |
+| `WP_ADMIN_PASS` | WordPress admin password |
+| `WP_EDITOR` | WordPress editor username |
+| `WP_EDITOR_PASS` | WordPress editor password |
+| `FTP_PASSWORD` | FTP user password *(bonus)* |
 
 ---
 
@@ -172,8 +176,10 @@ The check verifies:
 - Docker network is correctly configured
 - MariaDB is alive and the WordPress database is populated
 - WordPress has the required users (admin + editor)
-- KALPA theme is active; Elementor and WPKoi plugins are active
+- KALPA theme is active; Elementor and WPKoi plugins are active *(bonus)*
+- Cast users (subscriber accounts with profile avatars) exist *(bonus)*
 - Redis cache is connected *(bonus)*
+- Adminer is reachable on port 8080 *(bonus)*
 - No Dockerfiles use `:latest` tags or hardcoded credentials
 - No forbidden patterns (`network: host`, `--link`, infinite loops)
 

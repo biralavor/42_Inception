@@ -11,7 +11,7 @@ The stack consists of three containers communicating over a private Docker netwo
 - **WordPress + php-fpm** — application server (no nginx inside)
 - **MariaDB** — database server (no nginx inside)
 
-Data is persisted via two Docker volumes (WordPress files and database), and all sensitive configuration is managed through environment variables and Docker secrets — never hardcoded.
+Data is persisted via two bind-mount volumes (WordPress files and database), and all configuration — including credentials — is managed through `srcs/.env`, which is never committed to the repository.
 
 ---
 
@@ -28,29 +28,28 @@ Data is persisted via two Docker volumes (WordPress files and database), and all
 ```
 .
 ├── Makefile
-├── secrets/
-│   ├── credentials.txt
-│   ├── db_password.txt
-│   └── db_root_password.txt
 └── srcs/
-    ├── .env
+    ├── .env              ← create from .env.example (never committed)
+    ├── .env.example      ← tracked template: copy and fill in before running
     ├── docker-compose.yml
-    └── requirements/
-        ├── mariadb/
-        │   ├── conf/
-        │   ├── Dockerfile
-        │   ├── .dockerignore
-        │   └── tools/
-        ├── nginx/
-        │   ├── conf/
-        │   ├── Dockerfile
-        │   ├── .dockerignore
-        │   └── tools/
-        └── wordpress/
-            ├── conf/
-            ├── Dockerfile
-            ├── .dockerignore
-            └── tools/
+    ├── requirements/
+    │   ├── mariadb/
+    │   │   ├── conf/
+    │   │   ├── Dockerfile
+    │   │   └── tools/
+    │   ├── nginx/
+    │   │   ├── conf/
+    │   │   ├── Dockerfile
+    │   │   └── tools/
+    │   └── wordpress/
+    │       ├── conf/
+    │       ├── Dockerfile
+    │       └── tools/
+    └── bonus/            ← optional bonus services
+        ├── adminer/
+        ├── ftp/
+        ├── redis/
+        └── static/
 ```
 
 ### Build and run
@@ -71,7 +70,7 @@ make re
 
 ### Bonus services
 
-The bonus stack adds an FTP server and a themed WordPress setup (Kalpa + Elementor + cast users) on top of the mandatory services.
+The bonus stack adds an FTP server, an Adminer MariaDB GUI, and a themed WordPress setup (Kalpa + Elementor + cast users) on top of the mandatory services.
 
 ```bash
 # Start mandatory + all bonus services
@@ -90,7 +89,7 @@ make bonus_down
 | Back to mandatory only | `make fclean && make` |
 | Fresh bonus build | `make fclean && make bonus` |
 
-> Both `make` and `make bonus` block until WordPress (php-fpm) is actually ready before printing the "up!" message. Wait for that message before opening the browser.
+> Both `make` and `make bonus` block until the stack is fully ready before printing the "up!" message — `make bonus` waits for all plugins, themes, and cast users to finish installing. Wait for that message before opening the browser.
 
 ### Access
 
@@ -121,14 +120,14 @@ Docker containers share the host kernel but isolate processes via namespaces and
 
 ### Secrets vs Environment Variables
 
-| | Docker Secrets | Environment Variables |
+| | `.env` file | Hardcoded in Dockerfile / compose |
 |---|---|---|
-| Storage | Encrypted in-memory tmpfs | Plaintext in process env |
-| Visibility | Only to authorized services | Visible via `docker inspect` |
-| Git safety | Never in repository | Risk of accidental commit |
-| Best for | Passwords, API keys, tokens | Non-sensitive config (domain, ports) |
+| Git safety | Gitignored — never committed | Exposed in repository history |
+| Flexibility | Changed without rebuilding | Requires image rebuild |
+| Visibility | Only to processes that need it | Visible to anyone with repo access |
+| Best for | All credentials and config | Nothing — never do this |
 
-This project uses a `.env` file for non-sensitive configuration and Docker secrets (mounted as files) for all credentials — passwords never appear in Dockerfiles or `docker-compose.yml`.
+This project stores all credentials (`DB_PASSWORD`, `WP_ADMIN_PASS`, etc.) in `srcs/.env`, which is covered by `.gitignore`. A tracked `srcs/.env.example` template shows evaluators which variables to fill in. Passwords never appear in Dockerfiles or `docker-compose.yml`.
 
 ### Docker Network vs Host Network
 
@@ -150,7 +149,7 @@ This project uses a custom **bridge network** (`docker-network`). Only NGINX exp
 | Performance | Optimized | Depends on OS |
 | Use case | Persistent data | Dev (live code reload) |
 
-This project uses **Docker volumes** for the WordPress database and website files. Volumes are stored under `/home/login/data` on the host machine.
+This project uses **bind mounts** for the WordPress database and website files. Data is stored under `DATA_PATH` (default `/home/login/data`) on the host machine, set via `srcs/.env`.
 
 ---
 
@@ -176,7 +175,7 @@ Full project documentation lives in the `docs/` directory:
 - [php-fpm configuration](https://www.php.net/manual/en/install.fpm.configuration.php)
 - [TLS/SSL best practices](https://wiki.mozilla.org/Security/Server_Side_TLS)
 - [PID 1 and Docker best practices](https://blog.phusion.nl/2015/01/20/docker-and-the-pid-1-zombie-reaping-problem/)
-- [Docker secrets documentation](https://docs.docker.com/engine/swarm/secrets/)
+- [Docker Compose env_file reference](https://docs.docker.com/compose/environment-variables/env-file/)
 
 ### AI Usage
 

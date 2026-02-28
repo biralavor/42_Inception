@@ -1,5 +1,6 @@
 FROM alpine:3.22
 
+# Mandatory PHP extensions — required for WordPress core + WP-CLI
 RUN apk add --no-cache \
     php84 \
     php84-fpm \
@@ -16,11 +17,15 @@ RUN apk add --no-cache \
     php84-intl \
     php84-fileinfo \
     php84-phar \
-    php84-ctype \
-    php84-redis \
-    php84-tokenizer \
     wget \
     mariadb-client
+
+# Bonus-only PHP extensions — redis-cache plugin + wp config set for Redis
+# Installed only when BONUS=true (injected by make bonus via docker-compose build arg)
+ARG BONUS=false
+RUN if [ "${BONUS}" = "true" ]; then \
+    apk add --no-cache php84-redis php84-ctype php84-tokenizer; \
+fi
 
 # WP-CLI needs a plain 'php' binary in PATH
 RUN ln -s /usr/bin/php84 /usr/bin/php
