@@ -176,7 +176,8 @@ The check verifies:
 - Docker network is correctly configured
 - MariaDB is alive and the WordPress database is populated
 - WordPress has the required users (admin + editor)
-- KALPA theme is active; Elementor and WPKoi plugins are active
+- KALPA theme is active; Elementor and WPKoi plugins are active *(bonus)*
+- Cast users (subscriber accounts with profile avatars) exist *(bonus)*
 - Redis cache is connected *(bonus)*
 - Adminer is reachable on port 8080 *(bonus)*
 - No Dockerfiles use `:latest` tags or hardcoded credentials
