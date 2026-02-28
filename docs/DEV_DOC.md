@@ -72,17 +72,6 @@ getent hosts umeneses.42.fr
 # Expected: 127.0.0.1   umeneses.42.fr
 ```
 
-### 5. Generate a self-signed TLS certificate
-
-Place the certificate and key in `srcs/requirements/nginx/conf/` (or wherever your nginx Dockerfile COPYs them from). Example:
-
-```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout srcs/requirements/nginx/conf/umeneses.key \
-    -out srcs/requirements/nginx/conf/umeneses.crt \
-    -subj "/C=BR/ST=SP/L=SaoPaulo/O=42/CN=umeneses.42.fr"
-```
-
 ---
 
 ## Build and Launch
@@ -97,10 +86,11 @@ make
 
 What happens:
 1. `dirs` target creates `${DATA_PATH}/wordpress` and `${DATA_PATH}/mariadb` on the host
-2. `docker compose up -d --build` builds all images from their Dockerfiles and starts containers
-3. WordPress installs itself on first boot (downloads core, creates DB tables, installs theme and plugins)
+2. `docker compose up -d --build --wait` builds all images and starts containers, waiting until healthy
+3. WordPress installs itself on first boot: downloads core, creates DB tables, creates admin and editor users
+4. The nginx entrypoint auto-generates a self-signed TLS certificate on first start (no manual step needed)
 
-Typical first-boot time: **30–90 seconds** depending on network speed (WordPress core, theme, and plugins are downloaded at runtime).
+Typical first-boot time: **30–60 seconds** for mandatory (`make`); **2–4 minutes** for bonus (`make bonus`) since plugins and themes are downloaded at runtime.
 
 ### Check that everything started
 
@@ -267,6 +257,100 @@ Bonus services live under `srcs/bonus/<service>/` and are gated behind the `bonu
 7. Rebuild and verify with `make fclean && make bonus`
 
 > **Why `profiles: [bonus]` matters:** without it the service starts with plain `make`, collapsing the mandatory/bonus separation. Every bonus service must carry this key.
+
+---
+
+## Accessing Bonus Services
+
+All bonus services start with `make bonus`. Run from the **repository root**.
+
+### Redis — Object Cache (internal only)
+
+Redis has no exposed host port. Verify it is running and the WordPress cache is connected:
+
+```bash
+# Ping the Redis server
+docker exec redis redis-cli PING
+# Expected: PONG
+
+# Check WordPress Redis cache status via WP-CLI
+docker exec wordpress wp redis status --path=/var/www/html --allow-root
+# Expected: Status: Connected
+```
+
+Redis is used automatically by WordPress once the `redis-cache` plugin is active. No browser access needed.
+
+### FTP — WordPress Volume Access
+
+FTP is exposed on port **21** (passive ports 21100–21110). The FTP root maps to the WordPress web root (`/var/www/html`).
+
+Credentials come from `srcs/.env`:
+
+| Field    | Value                              |
+|----------|------------------------------------|
+| Host     | `localhost`                        |
+| Port     | `21`                               |
+| Username | value of `FTP_USER` in `srcs/.env` |
+| Password | value of `FTP_PASSWORD` in `srcs/.env` |
+| Mode     | Active or Passive                  |
+
+Connect with any FTP client (FileZilla, `ftp`, `lftp`):
+
+```bash
+# CLI example
+ftp localhost
+# or
+lftp -u "$FTP_USER","$FTP_PASSWORD" ftp://localhost
+```
+
+Verify the connection returns a listing of the WordPress root:
+
+```bash
+source srcs/.env
+curl --silent --list-only \
+    "ftp://${FTP_USER}:${FTP_PASSWORD}@localhost/" | head
+```
+
+### Adminer — MariaDB Web GUI
+
+Adminer runs on port **8080** and provides a browser-based interface to the MariaDB database.
+
+```
+http://localhost:8080
+```
+
+Fill in the login form with these values:
+
+| Field    | Value                                          |
+|----------|------------------------------------------------|
+| System   | MySQL                                          |
+| Server   | `mariadb`                                      |
+| Username | value of `WP_USER` in `srcs/.env`              |
+| Password | value of `DB_PASSWORD` in `srcs/.env`          |
+| Database | value of `WP_DATABASE` in `srcs/.env`          |
+
+> `mariadb` resolves to the container IP via Docker DNS — both Adminer and MariaDB share `inception_network`.
+
+Verify from the CLI:
+
+```bash
+curl -s http://localhost:8080/ | grep -i adminer
+# Expected: HTML output containing "Adminer"
+```
+
+### Static Site — Showcase Page
+
+The static site is a plain HTML/CSS page served on port **8888**. No authentication required.
+
+```
+http://localhost:8888
+```
+
+Verify from the CLI:
+
+```bash
+curl -s http://localhost:8888/ | grep -i "<title>"
+```
 
 ---
 

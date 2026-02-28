@@ -89,7 +89,7 @@ make bonus_down
 | Back to mandatory only | `make fclean && make` |
 | Fresh bonus build | `make fclean && make bonus` |
 
-> Both `make` and `make bonus` block until WordPress (php-fpm) is actually ready before printing the "up!" message. Wait for that message before opening the browser.
+> Both `make` and `make bonus` block until the stack is fully ready before printing the "up!" message — `make bonus` waits for all plugins, themes, and cast users to finish installing. Wait for that message before opening the browser.
 
 ### Access
 
