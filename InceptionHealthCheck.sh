@@ -170,7 +170,7 @@ fi
 # ── 8. MariaDB Health ─────────────────────────────────────────────────────────
 section "MariaDB"
 if container_running mariadb; then
-    db_ping=$(docker exec mariadb sh -c 'mariadb-admin ping -uroot -p"$(cat /run/secrets/db_root_password)" --skip-ssl 2>/dev/null' || echo "fail")
+    db_ping=$(docker exec mariadb sh -c 'mariadb-admin ping -uroot -p"${DB_ROOT_PASSWORD}" --skip-ssl 2>/dev/null' || echo "fail")
     if echo "$db_ping" | grep -q "alive"; then
         pass "MariaDB is alive"
     else
@@ -209,7 +209,7 @@ if container_running mariadb; then
 
     # WordPress database must not be empty (connect via socket as root — no password needed from docker exec)
     mysql_db=$(grep "^WP_DATABASE=" srcs/.env 2>/dev/null | cut -d= -f2 | tr -d '\r' || echo "wordpress")
-    wp_tables=$(docker exec mariadb sh -c "mariadb -uroot -p\"\$(cat /run/secrets/db_root_password)\" --skip-ssl -e \"SHOW TABLES FROM \\\`${mysql_db}\\\`;\" 2>/dev/null" | grep -vc "Tables_in" || true)
+    wp_tables=$(docker exec mariadb sh -c "mariadb -uroot -p\"\${DB_ROOT_PASSWORD}\" --skip-ssl -e \"SHOW TABLES FROM \\\`${mysql_db}\\\`;\" 2>/dev/null" | grep -vc "Tables_in" || true)
     if [[ "$wp_tables" -gt 0 ]]; then
         pass "WordPress database '${mysql_db}' has ${wp_tables} table(s) — not empty"
     else
@@ -330,31 +330,39 @@ fi
 
 # ── 12. Secrets & Environment Files ──────────────────────────────────────────
 section "Secrets & Environment"
-for secret in secrets/db_password.txt secrets/db_root_password.txt secrets/credentials.txt; do
-    if [[ -f "$secret" && -s "$secret" ]]; then
-        pass "Secret file exists and non-empty: $secret"
-    elif [[ -f "$secret" ]]; then
-        fail "Secret file exists but is EMPTY: $secret"
-    else
-        fail "Secret file missing: $secret"
-    fi
-done
-
 if [[ -f "srcs/.env" ]]; then
     pass "srcs/.env exists"
+
+    # Verify all required credentials are present and non-empty in .env
+    required_vars=(
+        DB_PASSWORD
+        DB_ROOT_PASSWORD
+        WP_ADMIN_USER
+        WP_ADMIN_PASS
+        WP_EDITOR
+        WP_EDITOR_PASS
+    )
+    for var in "${required_vars[@]}"; do
+        value=$(grep "^${var}=" srcs/.env 2>/dev/null | cut -d= -f2- | tr -d '\r')
+        if [[ -n "$value" ]]; then
+            pass "srcs/.env: ${var} is set"
+        else
+            fail "srcs/.env: ${var} is missing or empty"
+        fi
+    done
 else
     fail "srcs/.env missing"
 fi
 
-# Secrets must not be tracked by git
+# .env must not be tracked by git
 if git rev-parse --git-dir &>/dev/null; then
-    if git ls-files --error-unmatch secrets/ &>/dev/null 2>&1; then
-        fail "secrets/ directory is tracked by git (CRITICAL — remove it from git history)"
+    if git ls-files --error-unmatch srcs/.env &>/dev/null 2>&1; then
+        fail "srcs/.env is tracked by git (CRITICAL — credentials must not be committed)"
     else
-        pass "secrets/ directory is NOT tracked by git"
+        pass "srcs/.env is NOT tracked by git"
     fi
 else
-    info "Not a git repository — skipping git secret tracking check"
+    info "Not a git repository — skipping git tracking check"
 fi
 
 # ── 13. Repository Structure ──────────────────────────────────────────────────
@@ -511,6 +519,53 @@ else
     bfail "Elementor plugin not tested (container not running)"
     bfail "wpkoi plugin not tested (container not running)"
     bfail "Cast users not tested (container not running)"
+fi
+
+# ── B4. Adminer Container & HTTP ─────────────────────────────────────────────
+bonus_section "Adminer"
+if container_running adminer; then
+    bpass "Container 'adminer' is running"
+
+    # Restart policy
+    adminer_policy=$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' adminer 2>/dev/null || echo "N/A")
+    if [[ "$adminer_policy" =~ ^(unless-stopped|always|on-failure)$ ]]; then
+        bpass "adminer restart policy: $adminer_policy"
+    else
+        bfail "adminer has no valid restart policy (got: '$adminer_policy')"
+    fi
+
+    # Port 8080 must be exposed on the host
+    if docker ps --format '{{.Ports}}' | grep -q ':8080->'; then
+        bpass "Adminer port 8080 is exposed on the host"
+    else
+        bfail "Adminer port 8080 is NOT exposed on the host"
+    fi
+
+    # HTTP response must contain "Adminer" in the HTML
+    if command -v curl &>/dev/null; then
+        adminer_html=$(curl -s --max-time 5 http://localhost:8080/ 2>/dev/null || echo "")
+        if echo "$adminer_html" | grep -qi "adminer"; then
+            bpass "Adminer web UI responds on http://localhost:8080 (HTML contains 'Adminer')"
+        else
+            bfail "Adminer web UI did not return expected HTML on http://localhost:8080"
+        fi
+    else
+        info "curl not found — skipping Adminer HTTP check"
+    fi
+
+    # adminer container must be on the inception network
+    net_adminer=$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -i inception || true)
+    if [[ -n "$net_adminer" ]] && docker network inspect "$net_adminer" 2>/dev/null | grep -q '"adminer"'; then
+        bpass "adminer container is connected to $net_adminer"
+    else
+        bfail "adminer container is NOT connected to the inception network"
+    fi
+else
+    bfail "Container 'adminer' is NOT running (expected after 'make bonus')"
+    bfail "adminer restart policy not tested (container not running)"
+    bfail "Adminer port 8080 not tested (container not running)"
+    bfail "Adminer HTTP UI not tested (container not running)"
+    bfail "Adminer network not tested (container not running)"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────

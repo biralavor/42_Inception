@@ -12,15 +12,22 @@ server {
     root  ${DOMAIN_ROOT};
     index index.php index.html;
 
+    # Re-resolve 'wordpress' hostname via Docker's embedded DNS so nginx
+    # picks up the new container IP after 'make bonus' recreates wordpress.
+    resolver 127.0.0.11 valid=10s;
+
     # WordPress pretty permalinks
     location / {
         try_files $uri $uri/ /index.php?$args;
     }
 
-    # Pass PHP requests to php-fpm in the wordpress container
+    # Pass PHP requests to php-fpm in the wordpress container.
+    # The $wp_backend variable forces per-TTL DNS re-resolution; a static
+    # hostname in fastcgi_pass would cache the IP forever at startup.
     location ~ \.php$ {
+        set $wp_backend "wordpress:9000";
         try_files      $uri =404;
-        fastcgi_pass   wordpress:9000;
+        fastcgi_pass   $wp_backend;
         fastcgi_index  index.php;
         include        fastcgi_params;
         fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;

@@ -184,6 +184,11 @@ if [ "${BONUS_SETUP:-false}" = "true" ]; then
 
     # Ensure php-fpm (nobody) owns any files added by bonus setup
     chown -R nobody:nobody "${WP_PATH}"
+
+    # Signal to the host (via the bind mount) that bonus setup is fully done.
+    # make bonus polls for this flag before printing "up and running".
+    touch "${WP_PATH}/.bonus-setup-done"
+    echo "Bonus setup complete."
 fi
 
 # Set hero image as featured image of post 1 (idempotent)

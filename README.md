@@ -46,6 +46,7 @@ Data is persisted via two bind-mount volumes (WordPress files and database), and
     │       ├── Dockerfile
     │       └── tools/
     └── bonus/            ← optional bonus services
+        ├── adminer/
         ├── ftp/
         ├── redis/
         └── static/
@@ -69,7 +70,7 @@ make re
 
 ### Bonus services
 
-The bonus stack adds an FTP server and a themed WordPress setup (Kalpa + Elementor + cast users) on top of the mandatory services.
+The bonus stack adds an FTP server, an Adminer MariaDB GUI, and a themed WordPress setup (Kalpa + Elementor + cast users) on top of the mandatory services.
 
 ```bash
 # Start mandatory + all bonus services
