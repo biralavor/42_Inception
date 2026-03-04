@@ -1,6 +1,6 @@
-# New post from Cobb:
+# Second Post from Cobb:
 ## Text body
-What is the most resilient parasite? Bacteria? A virus? An intestinal worm? An idea. Resilient... highly contagious. Once an idea has taken hold of the brain it's almost impossible to eradicate. An idea that is fully formed - fully understood - that sticks; right in there somewhere.
+- What is the most resilient parasite? Bacteria? A virus? An intestinal worm? An idea. Resilient... highly contagious. Once an idea has taken hold of the brain it's almost impossible to eradicate. An idea that is fully formed - fully understood - that sticks; right in there somewhere.
 
 ## Image body
 Inception-movie-poster-with-logo.webp
@@ -15,7 +15,6 @@ Inception-movie-poster-with-logo.webp
 - Cobb: For not asking whether I did.
 
 # New post from Arthur:
-
 
 ## Image body
 Inception-Scene-04.webp
