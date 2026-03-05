@@ -11,7 +11,7 @@ The stack consists of three containers communicating over a private Docker netwo
 - **WordPress + php-fpm** — application server (no nginx inside)
 - **MariaDB** — database server (no nginx inside)
 
-Data is persisted via two bind-mount volumes (WordPress files and database), and all configuration — including credentials — is managed through `srcs/.env`, which is never committed to the repository.
+Data is persisted via two named Docker volumes backed by bind mounts (WordPress files and database), and all configuration — including credentials — is managed through `srcs/.env`, which is never committed to the repository.
 
 ---
 
@@ -149,7 +149,7 @@ This project uses a custom **bridge network** (`docker-network`). Only NGINX exp
 | Performance | Optimized | Depends on OS |
 | Use case | Persistent data | Dev (live code reload) |
 
-This project uses **bind mounts** for the WordPress database and website files. Data is stored under `DATA_PATH` (default `/home/login/data`) on the host machine, set via `srcs/.env`.
+This project uses **named volumes backed by bind mounts** for the WordPress database and website files. Data is stored under `DATA_PATH` (default `/home/login/data`) on the host machine, set via `srcs/.env`. Named volumes make them visible to `docker volume ls`, satisfying the 42 subject requirement, while bind-backed storage keeps data at a controlled host path.
 
 ---
 

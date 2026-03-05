@@ -120,13 +120,22 @@ fi
 
 # ── 6. Docker Volumes ─────────────────────────────────────────────────────────
 section "Docker Volumes"
-# Volumes use direct bind mounts (not named volumes); verify containers have bind mounts
-for svc in wordpress mariadb; do
-    bind_src=$(docker inspect "$svc" --format '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}} {{end}}{{end}}' 2>/dev/null | tr ' ' '\n' | grep -v "^$" | head -1 || true)
-    if [[ -n "$bind_src" ]]; then
-        pass "Container '$svc' uses bind mount: $bind_src"
+# Volumes are named Docker volumes backed by bind mounts (driver: local, type: none).
+# docker inspect reports Type "volume" for named volumes, not "bind".
+for vol in inception_wordpress_data inception_mariadb_data; do
+    if docker volume inspect "$vol" &>/dev/null; then
+        host_src=$(docker volume inspect "$vol" --format '{{.Options.device}}' 2>/dev/null || true)
+        pass "Named volume '$vol' exists (host path: $host_src)"
     else
-        fail "Container '$svc' has no bind mount (data persistence may be missing)"
+        fail "Named volume '$vol' not found (run 'docker volume ls' to check)"
+    fi
+done
+for svc in wordpress mariadb; do
+    vol_name=$(docker inspect "$svc" --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' 2>/dev/null | tr ' ' '\n' | grep -v "^$" | head -1 || true)
+    if [[ -n "$vol_name" ]]; then
+        pass "Container '$svc' is using named volume: $vol_name"
+    else
+        fail "Container '$svc' has no named volume mount (data persistence may be missing)"
     fi
 done
 
