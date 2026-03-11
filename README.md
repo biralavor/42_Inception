@@ -15,6 +15,9 @@ Data is persisted via two named Docker volumes backed by bind mounts (WordPress 
 
 ---
 
+<img width="1291" height="957" alt="Inception-2026-03-11 14-35-37" src="https://github.com/user-attachments/assets/e45f1f20-30e6-41cf-aa6c-0369c01acb49" />
+
+
 ## Instructions
 
 ### Prerequisites
