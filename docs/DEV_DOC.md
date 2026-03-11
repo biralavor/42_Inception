@@ -369,6 +369,101 @@ curl -s http://localhost:8888/ | grep -i "<title>"
 
 ---
 
+## Modifying a Service Port
+
+Each service falls into one of two categories:
+
+| Category | Services | Where the port is declared |
+|----------|----------|---------------------------|
+| **Host-exposed** | nginx (443), ftp (21, 21100-21110), adminer (8080), static (8888) | `ports:` in `docker-compose.yml` |
+| **Internal-only** | wordpress (9000), mariadb (3306), redis (6379) | App config only — no `ports:` entry |
+
+Changing a port is a two-step operation: update the app config **and** every consumer that connects to it.
+
+---
+
+### nginx — change the HTTPS port (default: 443)
+
+nginx is the only service the subject mandates on 443. Changing it breaks the 42 requirement, but for local dev:
+
+1. `srcs/requirements/nginx/conf/wordpress.conf.template` — update `listen 443 ssl` to the new port
+2. `srcs/docker-compose.yml` — change `"443:443"` to `"<new>:<new>"` under `nginx`
+3. Rebuild: `make re`
+
+---
+
+### wordpress (php-fpm) — change the internal port (default: 9000)
+
+php-fpm and nginx must agree on the same port.
+
+1. `srcs/requirements/wordpress/conf/www.conf` — change `listen = 0.0.0.0:9000` to the new port
+2. `srcs/requirements/nginx/conf/wordpress.conf.template` — change `"wordpress:9000"` in `set $wp_backend`
+3. No `ports:` entry to touch (internal-only)
+4. Rebuild: `make re`
+
+---
+
+### mariadb — change the internal port (default: 3306)
+
+1. Add `--port=<new>` to the `mysqld` startup args in `srcs/requirements/mariadb/tools/entrypoint.sh`
+2. Update `WP_HOST` in `srcs/.env` if you also embed the port, **or** set `DB_PORT=<new>` and pass it to `wp config set` in the WordPress entrypoint
+3. No `ports:` entry to touch (internal-only)
+4. Rebuild: `make re`
+
+> Changing the MariaDB port is rarely needed — WordPress connects by hostname (`WP_HOST=mariadb`) and Docker DNS handles resolution. The port only matters if you expose it to the host for external tools.
+
+---
+
+### redis — change the internal port (default: 6379)
+
+1. `srcs/bonus/redis/conf/redis.conf` (or entrypoint) — set `port <new>`
+2. Add `WP_REDIS_PORT=<new>` to `srcs/.env` and pass it to `wp config set WP_REDIS_PORT` in the WordPress entrypoint
+3. No `ports:` entry to touch (internal-only)
+4. Rebuild: `make fclean && make bonus`
+
+---
+
+### adminer — change the host port (default: 8080)
+
+1. `srcs/docker-compose.yml` — change `"8080:8080"` to `"<new>:8080"` (left side = host port)
+2. No app config change needed — the container still listens on 8080 internally
+3. Rebuild: `make fclean && make bonus`
+
+---
+
+### static site — change the host port (default: 8888)
+
+1. `srcs/docker-compose.yml` — change `"8888:8888"` to `"<new>:<new>"`
+2. If the static site's nginx config has a hardcoded `listen 8888`, update it in `srcs/bonus/static/conf/`
+3. Rebuild: `make fclean && make bonus`
+
+---
+
+### FTP — change the control or passive ports (default: 21, 21100–21110)
+
+FTP requires both the control port and the passive range to match between the server config and the host mapping.
+
+1. `srcs/bonus/ftp/tools/entrypoint.sh` or vsftpd config — update `listen_port` and `pasv_min_port`/`pasv_max_port`
+2. `srcs/docker-compose.yml` — update `"21:21"` and `"21100-21110:21100-21110"` accordingly
+3. Rebuild: `make fclean && make bonus`
+
+---
+
+### Verify after any port change
+
+```bash
+# Confirm the container is listening on the new port
+docker exec <container> ss -tlnp
+
+# Confirm the host mapping
+docker compose -f srcs/docker-compose.yml ps
+
+# Run the full health check
+make check
+```
+
+---
+
 ## Running the Health Check
 
 ```bash
