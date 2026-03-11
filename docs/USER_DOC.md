@@ -114,6 +114,96 @@ Log in with the following values:
 
 > Adminer has no TLS. This is acceptable for 42 evaluation — the subject mandates TLS only on port 443.
 
+### MariaDB — Terminal Access
+
+Connect directly to the database from your terminal:
+
+```bash
+docker exec -it mariadb mariadb -u root -p
+```
+
+Enter `DB_ROOT_PASSWORD` from `srcs/.env` when prompted.
+
+To connect as the WordPress user instead:
+
+```bash
+docker exec -it mariadb mariadb -u <MYSQL_USER> -p <WP_DATABASE>
+```
+
+Common SQL commands once connected:
+
+```sql
+SHOW DATABASES;
+USE wordpress;
+SHOW TABLES;
+SELECT ID, user_login, user_email FROM wp_users;
+EXIT;
+```
+
+To run a one-liner without an interactive shell:
+
+```bash
+docker exec mariadb mariadb -u root -p"$DB_ROOT_PASSWORD" -e "SELECT user_login FROM wordpress.wp_users;"
+```
+
+> Replace `$DB_ROOT_PASSWORD` with the actual value from `srcs/.env`, or export it first: `export DB_ROOT_PASSWORD=$(grep DB_ROOT_PASSWORD srcs/.env | cut -d= -f2)`
+
+---
+
+### Redis — Cache Testing *(bonus)*
+
+Redis acts as a WordPress object cache. Verify it is working from the terminal:
+
+**1. Ping the Redis server:**
+
+```bash
+docker exec redis redis-cli ping
+```
+
+Expected output: `PONG`
+
+**2. Check connected clients and stats:**
+
+```bash
+docker exec redis redis-cli info clients
+docker exec redis redis-cli info stats
+```
+
+**3. Watch cache keys being written in real time:**
+
+```bash
+docker exec redis redis-cli monitor
+```
+
+Open the WordPress site in a browser while this runs — you should see `SET` and `GET` calls appear as pages load.
+
+**4. Count cached keys:**
+
+```bash
+docker exec redis redis-cli dbsize
+```
+
+A non-zero result confirms WordPress is writing to the cache.
+
+**5. Inspect a specific key:**
+
+```bash
+docker exec redis redis-cli keys "*"
+docker exec redis redis-cli get <key>
+```
+
+**6. Flush the cache (force a cold start):**
+
+```bash
+docker exec redis redis-cli flushall
+```
+
+After flushing, reload the WordPress site and run `dbsize` again — the count should grow back as pages are cached.
+
+> If `dbsize` stays at `0` after browsing the site, the Redis object cache plugin may not be active. Check WordPress plugins at `https://umeneses.42.fr/wp-admin/plugins.php`.
+
+---
+
 ### Static Site *(bonus)*
 
 ```
@@ -127,6 +217,45 @@ ftp://localhost
 ```
 
 Connect with `FTP_USER` and `FTP_PASSWORD` from `srcs/.env`. The FTP root is the WordPress web root (`/var/www/html`).
+
+#### Terminal FTP commands
+
+Connect interactively with `ftp` or `lftp`:
+
+```bash
+ftp localhost
+```
+
+Enter `FTP_USER` and `FTP_PASSWORD` when prompted. Common commands:
+
+```
+ls              # list remote files
+cd wp-content   # change remote directory
+lcd ~/Downloads # change local directory
+get style.css   # download a file
+put theme.zip   # upload a file
+bye             # disconnect
+```
+
+For scripted/non-interactive transfers, use `lftp`:
+
+```bash
+lftp -u <FTP_USER>,<FTP_PASSWORD> ftp://localhost -e "ls; bye"
+```
+
+Upload a file non-interactively:
+
+```bash
+lftp -u <FTP_USER>,<FTP_PASSWORD> ftp://localhost -e "put /local/path/file.zip; bye"
+```
+
+Download a directory recursively:
+
+```bash
+lftp -u <FTP_USER>,<FTP_PASSWORD> ftp://localhost -e "mirror wp-content /tmp/wp-content; bye"
+```
+
+> The FTP server uses passive mode (ports 21100–21110). If behind a firewall, ensure those ports are open.
 
 ---
 
